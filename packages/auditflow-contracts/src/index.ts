@@ -14,6 +14,7 @@ export {
 export {
   AuditFlowServiceError,
   createAuditService,
+  estimateRoiService,
   mapWorkflowToOpportunityScoreInput,
   scoreOpportunitiesService,
   upsertWorkflowService,
@@ -44,6 +45,8 @@ export type {
 export type {
   AuditFlowServiceDependencies,
   CreateAuditServiceResult,
+  EstimateRoiScenario,
+  EstimateRoiServiceResult,
   ScoredOpportunity,
   ScoreOpportunitiesServiceResult,
   UpsertWorkflowServiceResult,

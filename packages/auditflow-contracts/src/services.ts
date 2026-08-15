@@ -4,6 +4,7 @@ import {
   type AuditFlowRepositories,
   type AuditId,
   type CreateAuditInput,
+  type EstimateRoiInput,
   type EventId,
   type ScoreOpportunitiesInput,
   type TenantScope,
@@ -18,6 +19,13 @@ import {
   type OpportunityScoreResult,
   type PriorityBand,
 } from "../../scoring-engine/src/opportunity-score.ts";
+import {
+  DEFAULT_ROI_SCENARIOS,
+  ROI_VERSION,
+  calculateRoiScenario,
+  type RoiInputs,
+  type ScenarioAssumptions,
+} from "../../scoring-engine/src/roi.ts";
 
 export interface AuditFlowServiceDependencies {
   repositories: AuditFlowRepositories;
@@ -64,6 +72,28 @@ export interface ScoreOpportunitiesServiceResult {
   audit_id: AuditId;
   scoring_version: typeof SCORING_VERSION;
   opportunities: ScoredOpportunity[];
+}
+
+export interface EstimateRoiScenario {
+  name: "low" | "expected" | "high";
+  annual_hours_recovered: number;
+  annual_labor_value_usd: number;
+  annual_error_reduction_value_usd: number;
+  annual_revenue_uplift_usd: number;
+  annual_net_benefit_usd: number;
+  first_year_roi_percent: number | null;
+  payback_months: number | null;
+}
+
+export interface EstimateRoiServiceResult {
+  audit_id: AuditId;
+  currency: "USD";
+  roi_version: typeof ROI_VERSION;
+  scenarios: EstimateRoiScenario[];
+  assumptions: string[];
+  excluded_benefits: string[];
+  confidence: "low" | "medium" | "high";
+  disclaimer: string;
 }
 
 export class AuditFlowServiceError extends Error {
@@ -220,6 +250,131 @@ function scoringBlockers(workflow: WorkflowProfile, result: OpportunityScoreResu
   }
 
   return blockers;
+}
+
+function moneyAssumption(label: string, value: number | null | undefined): string {
+  if (value === null || value === undefined) return `${label}: not provided`;
+  return `${label}: $${Math.round(value).toLocaleString("en-US")}`;
+}
+
+function percentAssumption(label: string, value: number): string {
+  return `${label}: ${Math.round(value * 100)}%`;
+}
+
+function adjustedScenarioAssumptions(input: EstimateRoiInput): Record<EstimateRoiScenario["name"], ScenarioAssumptions> {
+  const coverageRatio =
+    input.automation_coverage_percent === undefined
+      ? 1
+      : (input.automation_coverage_percent / 100) / DEFAULT_ROI_SCENARIOS.expected.automationCoverage;
+  const adoptionRatio =
+    input.adoption_rate_percent === undefined
+      ? 1
+      : (input.adoption_rate_percent / 100) / DEFAULT_ROI_SCENARIOS.expected.adoptionRate;
+
+  return {
+    low: {
+      ...DEFAULT_ROI_SCENARIOS.low,
+      automationCoverage: Math.min(1, DEFAULT_ROI_SCENARIOS.low.automationCoverage * coverageRatio),
+      adoptionRate: Math.min(1, DEFAULT_ROI_SCENARIOS.low.adoptionRate * adoptionRatio),
+    },
+    expected: {
+      ...DEFAULT_ROI_SCENARIOS.expected,
+      automationCoverage:
+        input.automation_coverage_percent === undefined
+          ? DEFAULT_ROI_SCENARIOS.expected.automationCoverage
+          : input.automation_coverage_percent / 100,
+      adoptionRate:
+        input.adoption_rate_percent === undefined
+          ? DEFAULT_ROI_SCENARIOS.expected.adoptionRate
+          : input.adoption_rate_percent / 100,
+    },
+    high: {
+      ...DEFAULT_ROI_SCENARIOS.high,
+      automationCoverage: Math.min(1, DEFAULT_ROI_SCENARIOS.high.automationCoverage * coverageRatio),
+      adoptionRate: Math.min(1, DEFAULT_ROI_SCENARIOS.high.adoptionRate * adoptionRatio),
+    },
+  };
+}
+
+function estimateRoiConfidence(workflows: WorkflowProfile[]): "low" | "medium" | "high" {
+  if (workflows.some((workflow) => workflow.evidence_quality === "unknown")) return "low";
+  if (workflows.every((workflow) => workflow.evidence_quality === "measured")) return "high";
+  return "medium";
+}
+
+function aggregateRoiInputs(
+  workflows: WorkflowProfile[],
+  defaultLoadedHourlyRateUsd: number,
+  input: EstimateRoiInput,
+): RoiInputs {
+  const totalMonthlyVolume = workflows.reduce((sum, workflow) => sum + workflow.monthly_volume, 0);
+  const totalMonthlyMinutes = workflows.reduce(
+    (sum, workflow) => sum + workflow.monthly_volume * workflow.minutes_per_run,
+    0,
+  );
+  const totalWeightedLaborValue = workflows.reduce(
+    (sum, workflow) =>
+      sum +
+      workflow.monthly_volume *
+        workflow.minutes_per_run *
+        (workflow.loaded_hourly_rate_usd ?? defaultLoadedHourlyRateUsd),
+    0,
+  );
+  const expectedMonthlyErrors = workflows.reduce(
+    (sum, workflow) => sum + workflow.monthly_volume * ((workflow.error_rate_percent ?? 0) / 100),
+    0,
+  );
+  const monthlyErrorCost = workflows.reduce(
+    (sum, workflow) =>
+      sum +
+      workflow.monthly_volume *
+        ((workflow.error_rate_percent ?? 0) / 100) *
+        (workflow.cost_per_error_usd ?? 0),
+    0,
+  );
+  const annualRevenueUplift =
+    input.include_revenue_uplift === true
+      ? workflows.reduce((sum, workflow) => sum + (workflow.annual_revenue_at_risk_usd ?? 0), 0)
+      : 0;
+
+  return {
+    monthlyVolume: totalMonthlyVolume || 1,
+    minutesPerRun: totalMonthlyVolume > 0 ? totalMonthlyMinutes / totalMonthlyVolume : 0,
+    loadedHourlyRate:
+      totalMonthlyMinutes > 0 ? totalWeightedLaborValue / totalMonthlyMinutes : defaultLoadedHourlyRateUsd,
+    currentErrorRate: totalMonthlyVolume > 0 ? expectedMonthlyErrors / totalMonthlyVolume : 0,
+    costPerError: expectedMonthlyErrors > 0 ? monthlyErrorCost / expectedMonthlyErrors : 0,
+    implementationCost: input.implementation_cost_usd ?? null,
+    annualSoftwareCost: input.annual_software_cost_usd ?? 0,
+    annualRevenueUplift,
+  };
+}
+
+function roiAssumptions(
+  workflows: WorkflowProfile[],
+  roiInputs: RoiInputs,
+  scenarioAssumptions: Record<EstimateRoiScenario["name"], ScenarioAssumptions>,
+): string[] {
+  const totalMonthlyVolume = workflows.reduce((sum, workflow) => sum + workflow.monthly_volume, 0);
+  return [
+    `Selected workflows: ${workflows.length}`,
+    `Combined monthly volume: ${totalMonthlyVolume}`,
+    `Weighted average minutes per run: ${Math.round(roiInputs.minutesPerRun * 100) / 100}`,
+    moneyAssumption("Loaded labor rate", roiInputs.loadedHourlyRate),
+    percentAssumption("Expected automation coverage", scenarioAssumptions.expected.automationCoverage),
+    percentAssumption("Expected user adoption", scenarioAssumptions.expected.adoptionRate),
+    moneyAssumption("One-time implementation cost", roiInputs.implementationCost),
+    moneyAssumption("Annual software cost", roiInputs.annualSoftwareCost),
+  ];
+}
+
+function excludedBenefits(workflows: WorkflowProfile[], includeRevenueUplift: boolean | undefined): string[] {
+  const excluded = ["Customer experience improvements", "Management time recovered"];
+  const revenueAtRisk = workflows.reduce((sum, workflow) => sum + (workflow.annual_revenue_at_risk_usd ?? 0), 0);
+  if (!includeRevenueUplift && revenueAtRisk > 0) {
+    excluded.unshift("Revenue uplift from faster or more consistent execution");
+  }
+  return excluded;
 }
 
 export function mapWorkflowToOpportunityScoreInput(workflow: WorkflowProfile): OpportunityScoreInput {
@@ -454,5 +609,88 @@ export async function scoreOpportunitiesService(
     audit_id: input.audit_id,
     scoring_version: SCORING_VERSION,
     opportunities,
+  };
+}
+
+export async function estimateRoiService(
+  deps: AuditFlowServiceDependencies,
+  scope: TenantScope,
+  input: EstimateRoiInput,
+): Promise<EstimateRoiServiceResult> {
+  const audit = await deps.repositories.audits.getAudit(scope, input.audit_id);
+  if (!audit) {
+    throw new AuditFlowServiceError(
+      "AUDIT_NOT_FOUND",
+      "Audit was not found for the current tenant.",
+      false,
+      ["audit_id"],
+    );
+  }
+
+  const workflowRecords = await deps.repositories.workflows.listWorkflows(scope, {
+    auditId: input.audit_id,
+    workflowIds: input.workflow_ids,
+  });
+
+  if (workflowRecords.length !== input.workflow_ids.length) {
+    const foundIds = new Set(workflowRecords.map((workflow) => workflow.workflowId));
+    const missingWorkflowIds = input.workflow_ids.filter((workflowId) => !foundIds.has(workflowId));
+    throw new AuditFlowServiceError(
+      "WORKFLOW_NOT_FOUND",
+      "One or more workflows were not found for the current audit and tenant.",
+      false,
+      missingWorkflowIds,
+    );
+  }
+
+  const unscoreable = workflowRecords.filter((workflow) => !workflow.completeness.scoreable);
+  if (unscoreable.length > 0) {
+    throw new AuditFlowServiceError(
+      "INSUFFICIENT_EVIDENCE",
+      "One or more selected workflows need more evidence before ROI estimation.",
+      true,
+      unscoreable.flatMap((workflow) => workflow.completeness.missingFields),
+    );
+  }
+
+  const workflows = workflowRecords.map((record) => record.workflow);
+  const assumptions = adjustedScenarioAssumptions(input);
+  const roiInputs = aggregateRoiInputs(workflows, audit.defaultLoadedHourlyRateUsd, input);
+  const scenarios = (["low", "expected", "high"] as const).map((name) => {
+    const result = calculateRoiScenario(roiInputs, assumptions[name]);
+    return {
+      name,
+      annual_hours_recovered: result.annualHoursRecovered,
+      annual_labor_value_usd: result.annualLaborValue,
+      annual_error_reduction_value_usd: result.annualErrorReductionValue,
+      annual_revenue_uplift_usd: result.annualRevenueUplift,
+      annual_net_benefit_usd: result.annualNetBenefit,
+      first_year_roi_percent: result.firstYearRoiPercent,
+      payback_months: result.paybackMonths,
+    };
+  });
+
+  const now = deps.clock.now();
+  await deps.repositories.events.appendEvent(scope, {
+    eventId: deps.ids.eventId(),
+    auditId: input.audit_id,
+    type: "roi.estimated",
+    occurredAt: now,
+    payload: {
+      roiVersion: ROI_VERSION,
+      workflowIds: input.workflow_ids,
+      includeRevenueUplift: input.include_revenue_uplift ?? false,
+    },
+  });
+
+  return {
+    audit_id: input.audit_id,
+    currency: "USD",
+    roi_version: ROI_VERSION,
+    scenarios,
+    assumptions: roiAssumptions(workflows, roiInputs, assumptions),
+    excluded_benefits: excludedBenefits(workflows, input.include_revenue_uplift),
+    confidence: estimateRoiConfidence(workflows),
+    disclaimer: "These are planning estimates based on supplied assumptions, not guaranteed financial results.",
   };
 }

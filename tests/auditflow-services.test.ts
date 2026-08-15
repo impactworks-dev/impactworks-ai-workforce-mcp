@@ -7,6 +7,7 @@ import {
   createAuditRecord,
   createAuditService,
   createWorkflowRecord,
+  estimateRoiService,
   mapWorkflowToOpportunityScoreInput,
   scoreOpportunitiesService,
   upsertWorkflowService,
@@ -456,6 +457,121 @@ test("scoreOpportunitiesService fails closed across tenant boundaries", async ()
         deps,
         { tenantId: "ten_other", actorUserId: "usr_other" },
         { audit_id: "aud_01JZ6K8M" },
+      ),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "AUDIT_NOT_FOUND");
+      return true;
+    },
+  );
+});
+
+test("estimateRoiService aggregates selected workflows into low, expected, and high planning scenarios", async () => {
+  const { deps, repositories } = await createAuditWithScoreableWorkflows();
+
+  const result = await estimateRoiService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_ids: ["wf_leadfollowup", "wf_proposal", "wf_weeklyreporting"],
+    implementation_cost_usd: 12_000,
+    annual_software_cost_usd: 3_000,
+    automation_coverage_percent: 65,
+    adoption_rate_percent: 80,
+    include_revenue_uplift: false,
+  });
+
+  assert.equal(result.audit_id, "aud_01JZ6K8M");
+  assert.equal(result.currency, "USD");
+  assert.equal(result.roi_version, "iwaf-roi-1.0.0");
+  assert.deepEqual(
+    result.scenarios.map((scenario) => scenario.name),
+    ["low", "expected", "high"],
+  );
+  assert.equal(result.scenarios[1].annual_hours_recovered, 283.92);
+  assert.equal(result.scenarios[1].annual_revenue_uplift_usd, 0);
+  assert.equal(result.scenarios[1].first_year_roi_percent, 52.45);
+  assert.equal(result.confidence, "medium");
+  assert.ok(result.assumptions.includes("Selected workflows: 3"));
+  assert.ok(result.assumptions.includes("Expected automation coverage: 65%"));
+  assert.ok(result.excluded_benefits.includes("Revenue uplift from faster or more consistent execution"));
+  assert.equal(result.disclaimer, "These are planning estimates based on supplied assumptions, not guaranteed financial results.");
+  assert.equal(repositories.events.events.at(-1)?.type, "roi.estimated");
+});
+
+test("estimateRoiService can include revenue uplift when explicitly requested", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  const result = await estimateRoiService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_ids: ["wf_proposal"],
+    implementation_cost_usd: 12_000,
+    annual_software_cost_usd: 3_000,
+    include_revenue_uplift: true,
+  });
+
+  assert.equal(result.scenarios[1].annual_revenue_uplift_usd, 60_000);
+  assert.equal(result.confidence, "high");
+  assert.ok(!result.excluded_benefits.includes("Revenue uplift from faster or more consistent execution"));
+});
+
+test("estimateRoiService rejects missing workflows", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  await assert.rejects(
+    () =>
+      estimateRoiService(deps, scope, {
+        audit_id: "aud_01JZ6K8M",
+        workflow_ids: ["wf_leadfollowup", "wf_missing"],
+      }),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "WORKFLOW_NOT_FOUND");
+      assert.deepEqual(error.missing, ["wf_missing"]);
+      return true;
+    },
+  );
+});
+
+test("estimateRoiService rejects selected workflows with insufficient evidence", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+  await upsertWorkflowService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_id: "wf_unready",
+    workflow: {
+      ...workflow,
+      name: "Unready workflow",
+      monthly_volume: 0,
+      minutes_per_run: 0,
+      evidence_quality: "unknown",
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      estimateRoiService(deps, scope, {
+        audit_id: "aud_01JZ6K8M",
+        workflow_ids: ["wf_unready"],
+      }),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "INSUFFICIENT_EVIDENCE");
+      assert.ok(error.missing.includes("workflow.evidence_quality"));
+      return true;
+    },
+  );
+});
+
+test("estimateRoiService fails closed across tenant boundaries", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  await assert.rejects(
+    () =>
+      estimateRoiService(
+        deps,
+        { tenantId: "ten_other", actorUserId: "usr_other" },
+        {
+          audit_id: "aud_01JZ6K8M",
+          workflow_ids: ["wf_leadfollowup"],
+        },
       ),
     (error) => {
       assert.ok(error instanceof AuditFlowServiceError);
