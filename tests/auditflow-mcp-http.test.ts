@@ -170,6 +170,20 @@ test("AuditFlow HTTP MCP endpoint runs a scoped tool call", async () => {
 });
 
 test("AuditFlow HTTP MCP endpoint handles malformed requests safely", async () => {
+  const unauthenticatedInvalidJson = await handleAuditFlowMcpHttpRequest(
+    {
+      method: "POST",
+      path: "/mcp",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      body: "{",
+    },
+    options(),
+  );
+  assert.equal(unauthenticatedInvalidJson.status, 401);
+
   const invalidJson = await handleAuditFlowMcpHttpRequest(
     {
       method: "POST",
@@ -196,4 +210,3 @@ test("AuditFlow HTTP MCP endpoint handles malformed requests safely", async () =
   assert.equal(notification.status, 202);
   assert.equal(notification.body, "");
 });
-

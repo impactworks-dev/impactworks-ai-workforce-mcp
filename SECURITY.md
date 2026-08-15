@@ -19,6 +19,8 @@ Do not include real customer data, access tokens, passwords, or other secrets.
 ## Security principles
 
 - Tenant and user identity must come from verified authentication context.
+- HTTP MCP requests must validate bearer access tokens before tool dispatch, including issuer, audience/resource binding, expiration, scopes, and tenant/user claims.
+- MCP servers must not accept token passthrough from unrelated resources or forward inbound access tokens to downstream services.
 - Repositories must perform tenant checks even when middleware already authenticated the request.
 - Access is least-privilege, capability-scoped, and revocable.
 - Consequential actions require explicit policy and approval handling.
