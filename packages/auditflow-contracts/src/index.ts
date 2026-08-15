@@ -11,6 +11,11 @@ export {
   createAuditRecord,
   createWorkflowRecord,
 } from "./domain.ts";
+export {
+  AuditFlowServiceError,
+  createAuditService,
+  upsertWorkflowService,
+} from "./services.ts";
 export type {
   EvidenceConfidence,
   WorkflowCompletenessResult,
@@ -34,6 +39,11 @@ export type {
   WorkflowRecord,
   WorkflowRepository,
 } from "./domain.ts";
+export type {
+  AuditFlowServiceDependencies,
+  CreateAuditServiceResult,
+  UpsertWorkflowServiceResult,
+} from "./services.ts";
 
 export const AUDITFLOW_TOOL_NAMES = [
   "create_audit",
