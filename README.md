@@ -61,6 +61,9 @@ Official scores and ROI come from deterministic, versioned application code—no
 
 - Versioned opportunity-scoring engine
 - Versioned ROI scenario engine
+- Runtime-validated AuditFlow tool contracts
+- Tenant-scoped AuditFlow services for create, workflow capture, scoring, ROI, roadmap, solution stack, and report generation
+- Host-neutral AuditFlow tool dispatcher with an in-memory runtime for golden-path testing
 - Boundary and golden tests
 - Public development roadmap
 - Cog onboarding specification informed by current installable-agent patterns
@@ -83,6 +86,8 @@ Repository layout:
 ```text
 packages/
   scoring-engine/       Deterministic scores and ROI
+  auditflow-contracts/  Runtime contracts, validation, domain entities, and services
+  auditflow-mcp/        Host-neutral tool dispatcher and in-memory runtime
 tests/                  Node test suite
 docs/
   architecture.md       System and trust architecture
