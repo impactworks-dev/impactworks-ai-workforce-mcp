@@ -4,14 +4,14 @@
 
 ImpactWorks AI Workforce is a governed system of agents, tools, integrations, approvals, measurement, and human ownership. MCP servers expose bounded capabilities; they are not the agent personality, user interface, or policy authority.
 
-AuditFlow is the first product server. Flare is the working name for the installable desktop agent and approval surface that will consume the same contracts.
+AuditFlow is the first product server. Cog is the working name for the installable desktop agent and approval surface that will consume the same contracts.
 
 ## Logical architecture
 
 ```mermaid
 flowchart TB
     subgraph Experience
-      Flare["Flare desktop client"]
+      Cog["Cog desktop client"]
       Host["Compatible agent host"]
     end
 
@@ -30,7 +30,7 @@ flowchart TB
       Repository["Tenant-scoped repositories"]
     end
 
-    Flare --> Identity
+    Cog --> Identity
     Host --> Identity
     Identity --> Runtime
     Runtime --> Policy
@@ -106,6 +106,6 @@ Revenue uplift defaults to zero unless the user supplies a defensible value and 
 - Runtime schema validation
 - OAuth 2.1 authorization code with PKCE
 - Structured, redacted logs and OpenTelemetry traces
-- Signed and notarized macOS distribution for the first Flare proof
+- Signed and notarized macOS distribution for the first Cog proof
 
 Hosting, identity provider, and first external host remain implementation decisions rather than hard-coded assumptions.

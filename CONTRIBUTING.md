@@ -26,5 +26,5 @@ Use concise, outcome-focused commits, for example:
 ```text
 feat(scoring): add deterministic priority bands
 test(roi): cover zero-cost and negative-benefit cases
-docs(flare): specify progressive connection onboarding
+docs(cog): specify progressive connection onboarding
 ```

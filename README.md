@@ -6,10 +6,10 @@ This repository contains the public technical foundation for:
 
 - **ImpactWorks AuditFlow** — a deterministic workflow audit, opportunity-scoring, ROI, and roadmap engine.
 - **ImpactWorks MCP capability layer** — bounded, tenant-aware tools shared by compatible agent hosts.
-- **Flare** — the working name for an installable desktop agent and human approval surface.
+- **Cog** — the working name for an installable desktop agent and human approval surface.
 - **AgentOps** — quality, observability, governance, and continuous improvement.
 
-> Status: early development. AuditFlow is the first vertical slice. Flare is a working name and not yet a production commitment.
+> Status: early development. AuditFlow is the first vertical slice. Cog is a working name and not yet a production commitment.
 
 ## Product sequence
 
@@ -18,19 +18,19 @@ AuditFlow
   -> AI Workforce Blueprint
   -> Connected foundation
   -> First bounded workflow or agent
-  -> Flare installable experience
+  -> Cog installable experience
   -> AgentOps
 ```
 
-The immediate build priority is the host-neutral capability core. Flare will consume the same governed contracts rather than becoming a disconnected chatbot.
+The immediate build priority is the host-neutral capability core. Cog will consume the same governed contracts rather than becoming a disconnected chatbot.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    Human["Named human owner"] --> Flare["Flare desktop agent and approval surface"]
+    Human["Named human owner"] --> Cog["Cog desktop agent and approval surface"]
     Host["Compatible external host"] --> Runtime["Agent runtime"]
-    Flare --> Runtime
+    Cog --> Runtime
     Runtime --> Gateway["ImpactWorks MCP capability layer"]
     Gateway --> AuditFlow["AuditFlow tools"]
     Gateway --> Systems["Approved business systems"]
@@ -63,7 +63,7 @@ Official scores and ROI come from deterministic, versioned application code—no
 - Versioned ROI scenario engine
 - Boundary and golden tests
 - Public development roadmap
-- Flare onboarding specification informed by current installable-agent patterns
+- Cog onboarding specification informed by current installable-agent patterns
 
 ## Development
 
@@ -87,7 +87,7 @@ tests/                  Node test suite
 docs/
   architecture.md       System and trust architecture
   development-roadmap.md
-  flare-onboarding.md
+  cog-onboarding.md
 ```
 
 ## Operating principles
@@ -105,7 +105,7 @@ docs/
 
 - [Architecture](docs/architecture.md)
 - [Development roadmap](docs/development-roadmap.md)
-- [Flare install and onboarding](docs/flare-onboarding.md)
+- [Cog install and onboarding](docs/cog-onboarding.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

@@ -30,7 +30,7 @@
 - [ ] Produce a public-safe proof package
 - [ ] Connect a second host only after the first is stable
 
-## Phase 4 — Flare installable proof
+## Phase 4 — Cog installable proof
 
 - [ ] Signed, notarized macOS installer
 - [ ] Account and tenant bootstrap

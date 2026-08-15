@@ -1,6 +1,6 @@
-# Flare Install and Onboarding Experience
+# Cog Install and Onboarding Experience
 
-Status: product requirement for the Flare proof. Flare remains a working name.
+Status: product requirement for the Cog proof. Cog remains a working name.
 
 ## Research basis
 
@@ -31,7 +31,7 @@ Download
   -> Review outcome
 ```
 
-## What Flare should adopt
+## What Cog should adopt
 
 ### One guided install
 
@@ -42,7 +42,7 @@ Download
 
 ### Conversation before configuration
 
-The first screen asks one outcome question, not for integrations or technical settings. Flare translates that outcome into the smallest required capability set.
+The first screen asks one outcome question, not for integrations or technical settings. Cog translates that outcome into the smallest required capability set.
 
 ### Connect in context
 
@@ -54,12 +54,12 @@ The first screen asks one outcome question, not for integrations or technical se
 
 ### First useful task
 
-The first task must be bounded, reversible where possible, and approval-safe. For the initial ImpactWorks proof, Flare should analyze or prepare the lead-to-proposal workflow and stop at an approval-ready artifact before sending anything.
+The first task must be bounded, reversible where possible, and approval-safe. For the initial ImpactWorks proof, Cog should analyze or prepare the lead-to-proposal workflow and stop at an approval-ready artifact before sending anything.
 
 ### Routine learning
 
-- The user may demonstrate a workflow while Flare observes steps and decisions.
-- Flare saves a draft routine, not an immediately active automation.
+- The user may demonstrate a workflow while Cog observes steps and decisions.
+- Cog saves a draft routine, not an immediately active automation.
 - The user reviews steps, permissions, exceptions, and approval points.
 - A routine activates only after explicit approval and receives a version.
 
@@ -71,9 +71,9 @@ Start in observe-and-draft mode. Expand autonomy only after successful runs and 
 Observe -> Recommend -> Draft -> Act with approval -> Bounded autonomous action
 ```
 
-## What Flare should improve
+## What Cog should improve
 
-Grok Bot's shared computer reduces repeated sign-in friction, but a shared authenticated environment also concentrates risk. Flare should preserve connection convenience without granting every specialist blanket access.
+Grok Bot's shared computer reduces repeated sign-in friction, but a shared authenticated environment also concentrates risk. Cog should preserve connection convenience without granting every specialist blanket access.
 
 Required controls:
 
@@ -92,7 +92,7 @@ Required controls:
 
 ```mermaid
 flowchart LR
-    Installer["Signed installer"] --> Client["Flare desktop client"]
+    Installer["Signed installer"] --> Client["Cog desktop client"]
     Client --> Identity["Account, device, tenant identity"]
     Identity --> Provisioner["Isolated workspace provisioner"]
     Client --> Connections["Guided connection broker"]
@@ -107,7 +107,7 @@ flowchart LR
 
 ## First-run screens
 
-1. **Welcome:** what Flare does and does not do.
+1. **Welcome:** what Cog does and does not do.
 2. **Owner:** confirm the accountable human and organization.
 3. **Goal:** choose or describe one measurable outcome.
 4. **Plan:** show proposed steps, systems, affected data, and consequence.
