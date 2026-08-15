@@ -4,6 +4,14 @@ import {
   type TenantScope,
 } from "../../auditflow-contracts/src/index.ts";
 import {
+  buildProtectedResourceMetadata,
+  createJwtBearerScopeResolver,
+  createProtectedResourceMetadataUrl,
+  type AuditFlowJwtValidationOptions,
+  type AuditFlowOAuthValidationError,
+  type AuditFlowProtectedResourceMetadata,
+} from "./oauth.ts";
+import {
   AUDITFLOW_MCP_PROTOCOL_VERSION,
   createAuditFlowMcpProtocolServer,
   type AuditFlowMcpServerInfo,
@@ -41,6 +49,8 @@ export interface AuditFlowHttpServerOptions {
   endpointPath?: string;
   allowedOrigins?: string[];
   serverInfo?: Partial<AuditFlowMcpServerInfo>;
+  protectedResourceMetadata?: AuditFlowProtectedResourceMetadata;
+  protectedResourceMetadataPath?: string;
   protectedResourceMetadataUrl?: string;
 }
 
@@ -59,6 +69,14 @@ export interface AuditFlowHttpEnvironment {
   IMPACTWORKS_MCP_PORT?: string;
   IMPACTWORKS_MCP_HOST?: string;
   IMPACTWORKS_MCP_ALLOWED_ORIGINS?: string;
+  IMPACTWORKS_MCP_RESOURCE?: string;
+  IMPACTWORKS_AUTHORIZATION_SERVERS?: string;
+  IMPACTWORKS_OAUTH_ISSUER?: string;
+  IMPACTWORKS_OAUTH_AUDIENCE?: string;
+  IMPACTWORKS_OAUTH_JWKS_JSON?: string;
+  IMPACTWORKS_OAUTH_REQUIRED_SCOPES?: string;
+  IMPACTWORKS_OAUTH_TENANT_CLAIM?: string;
+  IMPACTWORKS_OAUTH_ACTOR_USER_CLAIM?: string;
 }
 
 export interface StartedAuditFlowHttpServer {
@@ -138,11 +156,25 @@ function unauthorized(options: AuditFlowHttpServerOptions): AuditFlowHttpRespons
   const headers: Record<string, string> = {
     "www-authenticate": "Bearer",
   };
-  if (options.protectedResourceMetadataUrl) {
+  const metadataUrl = options.protectedResourceMetadataUrl ??
+    (options.protectedResourceMetadata
+      ? createProtectedResourceMetadataUrl(
+        options.protectedResourceMetadata.resource,
+        options.protectedResourceMetadataPath,
+      )
+      : undefined);
+  if (metadataUrl) {
     headers["www-authenticate"] =
-      `Bearer resource_metadata="${options.protectedResourceMetadataUrl}"`;
+      `Bearer resource_metadata="${metadataUrl}"`;
   }
   return jsonResponse(401, { error: "unauthorized" }, headers);
+}
+
+function forbidden(error: AuditFlowOAuthValidationError): AuditFlowHttpResponse {
+  return jsonResponse(403, {
+    error: "forbidden",
+    reason: error.reason,
+  });
 }
 
 function assertJsonRpcRequest(value: unknown): JsonRpcRequest {
@@ -195,9 +227,19 @@ export async function handleAuditFlowMcpHttpRequest(
   options: AuditFlowHttpServerOptions,
 ): Promise<AuditFlowHttpResponse> {
   const endpointPath = options.endpointPath ?? "/mcp";
+  const protectedResourceMetadataPath =
+    options.protectedResourceMetadataPath ?? "/.well-known/oauth-protected-resource";
 
   if (request.path === "/health" && request.method === "GET") {
     return jsonResponse(200, { ok: true, service: options.serverInfo?.name ?? "impactworks-auditflow" });
+  }
+
+  if (
+    options.protectedResourceMetadata &&
+    request.path === protectedResourceMetadataPath &&
+    request.method === "GET"
+  ) {
+    return jsonResponse(200, options.protectedResourceMetadata);
   }
 
   if (request.path !== endpointPath) {
@@ -224,6 +266,25 @@ export async function handleAuditFlowMcpHttpRequest(
     return jsonResponse(415, { error: "unsupported_media_type" });
   }
 
+  let scope: TenantScope | null;
+  try {
+    scope = await authenticatedScope(request, undefined, options);
+    if (!scope) {
+      return unauthorized(options);
+    }
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      error.name === "AuditFlowOAuthValidationError"
+    ) {
+      const oauthError = error as AuditFlowOAuthValidationError;
+      return oauthError.httpStatus === 403 ? forbidden(oauthError) : unauthorized(options);
+    }
+    throw error;
+  }
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(request.body ?? "");
@@ -243,11 +304,6 @@ export async function handleAuditFlowMcpHttpRequest(
         error instanceof Error ? error.message : "Invalid JSON-RPC request.",
       ),
     );
-  }
-
-  const scope = await authenticatedScope(request, message, options);
-  if (!scope) {
-    return unauthorized(options);
   }
 
   if (isNotification(message)) {
@@ -289,6 +345,33 @@ export function createEnvBearerScopeResolver(
   };
 }
 
+function commaSeparated(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function createEnvOAuthScopeResolver(
+  env: AuditFlowHttpEnvironment = process.env,
+): AuditFlowBearerTokenResolver {
+  const issuer = env.IMPACTWORKS_OAUTH_ISSUER;
+  const audience = env.IMPACTWORKS_OAUTH_AUDIENCE ?? env.IMPACTWORKS_MCP_RESOURCE;
+  const jwksJson = env.IMPACTWORKS_OAUTH_JWKS_JSON;
+  if (!issuer || !audience || !jwksJson) {
+    return createEnvBearerScopeResolver(env);
+  }
+  const validationOptions: AuditFlowJwtValidationOptions = {
+    issuer,
+    audience,
+    jwks: JSON.parse(jwksJson) as { keys: JsonWebKey[] },
+    requiredScopes: commaSeparated(env.IMPACTWORKS_OAUTH_REQUIRED_SCOPES),
+    tenantClaim: env.IMPACTWORKS_OAUTH_TENANT_CLAIM,
+    actorUserClaim: env.IMPACTWORKS_OAUTH_ACTOR_USER_CLAIM,
+  };
+  return createJwtBearerScopeResolver(validationOptions);
+}
+
 function parseAllowedOrigins(env: AuditFlowHttpEnvironment): string[] {
   return (env.IMPACTWORKS_MCP_ALLOWED_ORIGINS ?? "")
     .split(",")
@@ -325,7 +408,14 @@ export async function startAuditFlowMcpHttpServer(
     deps: runtime.deps,
     endpointPath,
     allowedOrigins: options.allowedOrigins ?? parseAllowedOrigins(env),
-    resolveBearerToken: createEnvBearerScopeResolver(env),
+    resolveBearerToken: createEnvOAuthScopeResolver(env),
+    protectedResourceMetadata: env.IMPACTWORKS_MCP_RESOURCE
+      ? buildProtectedResourceMetadata({
+        resource: env.IMPACTWORKS_MCP_RESOURCE,
+        authorization_servers: commaSeparated(env.IMPACTWORKS_AUTHORIZATION_SERVERS),
+        scopes_supported: commaSeparated(env.IMPACTWORKS_OAUTH_REQUIRED_SCOPES),
+      })
+      : undefined,
   };
   const server = createServer(async (incoming, outgoing) => {
     try {
@@ -376,4 +466,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exitCode = 1;
   });
 }
-

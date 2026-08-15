@@ -20,7 +20,9 @@
 - [x] Six-tool golden path plus solution-stack contract
 - [x] Stable error envelope for tool-originated failures
 - [x] Bearer-token tenant middleware for local proof work
-- [ ] Production OAuth 2.1 resource-server validation
+- [x] Production-shaped OAuth 2.1 resource-server validation
+- [x] Protected resource metadata for authorization-server discovery
+- [x] JWT issuer, audience, expiry, scope, and trusted-claims tenant validation
 - [ ] Audit event log and evidence projection
 - [ ] First supported host integration
 - [ ] Synthetic audit evaluation harness

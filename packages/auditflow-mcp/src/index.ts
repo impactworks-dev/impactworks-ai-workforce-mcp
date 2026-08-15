@@ -4,10 +4,19 @@ export {
 } from "./handlers.ts";
 export {
   createEnvBearerScopeResolver,
+  createEnvOAuthScopeResolver,
   createStaticBearerScopeResolver,
   handleAuditFlowMcpHttpRequest,
   startAuditFlowMcpHttpServer,
 } from "./http.ts";
+export {
+  AuditFlowOAuthValidationError,
+  buildProtectedResourceMetadata,
+  createJwtBearerScopeResolver,
+  createProtectedResourceMetadataUrl,
+  tenantScopeFromJwtClaims,
+  validateJwtAccessToken,
+} from "./oauth.ts";
 export {
   AUDITFLOW_MCP_PROTOCOL_VERSION,
   createAuditFlowMcpProtocolServer,
@@ -39,6 +48,13 @@ export type {
   AuditFlowHttpServerOptions,
   StartedAuditFlowHttpServer,
 } from "./http.ts";
+export type {
+  AuditFlowJwtAlgorithm,
+  AuditFlowJwtClaims,
+  AuditFlowJwtValidationOptions,
+  AuditFlowOAuthValidationFailureReason,
+  AuditFlowProtectedResourceMetadata,
+} from "./oauth.ts";
 export type {
   AuditFlowMcpProtocolServer,
   AuditFlowMcpProtocolServerOptions,
