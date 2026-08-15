@@ -45,7 +45,7 @@
 
 ## Phase 4B — Edge-agent harness proof
 
-- [ ] Evaluate Cloudflare Agents as the default edge-agent runtime
+- [ ] Validate Cloudflare Agents as the selected default edge-agent runtime
 - [ ] Implement one bounded edge-agent proof for AuditFlow or Proposal and Follow-Up
 - [ ] Persist agent state, progress, evidence, approvals, and recovery status
 - [ ] Demonstrate pause/resume, blocked state, retry, and owner escalation

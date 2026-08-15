@@ -26,9 +26,9 @@ Cog is not only a mascot, chat window, or voice-to-text helper. It is the visibl
 
 ## Cloudflare edge-agent role
 
-Cloudflare Agents are a strong fit for the server-side runtime behind this harness because they provide durable agent identity, local state, real-time connections, scheduling, recoverable work, and sub-agent patterns on top of Durable Objects.
+Cloudflare Agents are the selected default runtime direction for the server-side edge-agent layer behind this harness. They are a strong fit because they provide durable agent identity, local state, real-time connections, scheduling, recoverable work, and sub-agent patterns on top of Durable Objects.
 
-Use Cloudflare-style edge agents for work that benefits from durable cloud state:
+Use Cloudflare edge agents for work that benefits from durable cloud state:
 
 - Long-running jobs that may wait on APIs, approvals, scheduled checks, or human input.
 - Per-user, per-client, per-audit, or per-workflow agent instances with isolated state.
@@ -139,7 +139,7 @@ Turns a demonstrated or repeated process into a draft routine with required tool
 - Display plan previews and approval cards.
 - Connect to mocked or local AuditFlow outputs before production edge orchestration.
 
-### Phase C - First edge-agent proof
+### Phase C - First Cloudflare edge-agent proof
 
 - Run one Cloudflare-backed AuditFlow Agent or Proposal and Follow-Up Agent.
 - Persist state, progress, evidence, and approvals.
