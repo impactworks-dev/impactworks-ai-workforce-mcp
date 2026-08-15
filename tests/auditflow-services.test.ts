@@ -9,7 +9,9 @@ import {
   createWorkflowRecord,
   estimateRoiService,
   generateRoadmapService,
+  getAuditReportService,
   mapWorkflowToOpportunityScoreInput,
+  recommendSolutionStackService,
   scoreOpportunitiesService,
   upsertWorkflowService,
   type AppendAuditEventInput,
@@ -691,6 +693,162 @@ test("generateRoadmapService fails closed across tenant boundaries", async () =>
           audit_id: "aud_01JZ6K8M",
           workflow_ids: ["wf_leadfollowup"],
         },
+      ),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "AUDIT_NOT_FOUND");
+      return true;
+    },
+  );
+});
+
+test("recommendSolutionStackService returns vendor-neutral architecture recommendations with optional examples", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  const result = await recommendSolutionStackService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_ids: ["wf_leadfollowup", "wf_proposal"],
+    preference: "fastest_launch",
+    allow_named_products: true,
+  });
+
+  assert.equal(result.audit_id, "aud_01JZ6K8M");
+  assert.deepEqual(
+    result.recommendations.map((recommendation) => recommendation.workflow_id),
+    ["wf_proposal", "wf_leadfollowup"],
+  );
+  assert.ok(result.recommendations[0].architecture_pattern.includes("Event-driven workflow orchestration"));
+  assert.ok(result.recommendations[0].capabilities.includes("proposal assembly"));
+  assert.deepEqual(result.recommendations[0].example_products, ["Zapier", "Make", "HubSpot", "OpenAI API"]);
+  assert.ok(result.recommendations[0].human_review_points.includes("External messages before sending"));
+  assert.ok(result.recommendations[0].security_controls.includes("Tenant-scoped records and tool access"));
+  assert.equal(result.recommendations[0].implementation_complexity, "medium");
+});
+
+test("recommendSolutionStackService can suppress named product examples", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  const result = await recommendSolutionStackService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_ids: ["wf_leadfollowup"],
+    allow_named_products: false,
+  });
+
+  assert.deepEqual(result.recommendations[0].example_products, []);
+});
+
+test("recommendSolutionStackService fails closed for missing workflows and insufficient evidence", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  await assert.rejects(
+    () =>
+      recommendSolutionStackService(deps, scope, {
+        audit_id: "aud_01JZ6K8M",
+        workflow_ids: ["wf_missing"],
+      }),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "WORKFLOW_NOT_FOUND");
+      return true;
+    },
+  );
+
+  await upsertWorkflowService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_id: "wf_unready",
+    workflow: {
+      ...workflow,
+      name: "Unready workflow",
+      monthly_volume: 0,
+      minutes_per_run: 0,
+      evidence_quality: "unknown",
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      recommendSolutionStackService(deps, scope, {
+        audit_id: "aud_01JZ6K8M",
+        workflow_ids: ["wf_unready"],
+      }),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "INSUFFICIENT_EVIDENCE");
+      return true;
+    },
+  );
+});
+
+test("getAuditReportService assembles a decision-ready report from workflows, scores, ROI, and roadmap", async () => {
+  const { deps, repositories } = await createAuditWithScoreableWorkflows();
+  const eventsBeforeReport = repositories.events.events.length;
+
+  const result = await getAuditReportService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    audience: "owner",
+    detail_level: "standard",
+    include_sprint_fit: true,
+  });
+
+  assert.equal(result.audit_id, "aud_01JZ6K8M");
+  assert.equal(result.report_version, "1.0");
+  assert.equal(result.generated_at, now);
+  assert.equal(result.status, "decision_ready");
+  assert.deepEqual(result.business_snapshot, {
+    name: "ImpactWorks",
+    industry: "AI consulting",
+    employee_count: 2,
+    primary_goal: "increase_capacity",
+  });
+  assert.match(result.executive_summary, /ImpactWorks has 3 scoreable workflow/);
+  assert.equal(result.top_opportunities[0].rank, 1);
+  assert.equal(result.top_opportunities[0].workflow_id, "wf_proposal");
+  assert.equal(result.roi_summary.confidence, "medium");
+  assert.equal(result.roi_summary.expected_first_year_roi_percent, 325.88);
+  assert.ok(result.roadmap_summary.first_move?.includes("Proposal assembly"));
+  assert.equal(result.roadmap_summary.days, 90);
+  assert.ok(result.evidence_gaps.some((gap) => gap.includes("Measure error rate")));
+  assert.ok(result.risks.some((risk) => risk.includes("confidential data")));
+  assert.equal(result.sprint_fit.qualified, true);
+  assert.equal(result.sprint_fit.recommended_sprint, "ImpactWorks Automation Sprint");
+  assert.equal((await repositories.audits.getAudit(scope, "aud_01JZ6K8M"))?.status, "ready_to_score");
+  assert.equal(repositories.events.events.length, eventsBeforeReport);
+});
+
+test("getAuditReportService returns a draft report when workflows are not decision-ready", async () => {
+  const repositories = buildDeps();
+  const deps = buildServiceDeps(repositories);
+  await createAuditService(deps, scope, {
+    business: {
+      name: "ImpactWorks",
+      industry: "AI consulting",
+      employee_count: 2,
+      primary_goal: "increase_capacity",
+    },
+  });
+
+  const result = await getAuditReportService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    include_sprint_fit: false,
+  });
+
+  assert.equal(result.status, "draft");
+  assert.deepEqual(result.top_opportunities, []);
+  assert.equal(result.roi_summary.expected_annual_net_benefit_usd, null);
+  assert.equal(result.roadmap_summary.first_move, null);
+  assert.equal(result.sprint_fit.qualified, false);
+  assert.deepEqual(result.sprint_fit.reasons, ["Sprint-fit assessment was excluded by request"]);
+});
+
+test("getAuditReportService fails closed across tenant boundaries", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  await assert.rejects(
+    () =>
+      getAuditReportService(
+        deps,
+        { tenantId: "ten_other", actorUserId: "usr_other" },
+        { audit_id: "aud_01JZ6K8M" },
       ),
     (error) => {
       assert.ok(error instanceof AuditFlowServiceError);
