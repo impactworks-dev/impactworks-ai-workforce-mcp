@@ -48,6 +48,10 @@ The first screen asks one outcome question, not for integrations or technical se
 
 Cog should capture rough intent through text first, then hotkey or voice, clean it into a proposed task, preview the plan and permissions, and route approved work to MCP tools or edge agents. The user should experience one visible harness even when durable specialist agents do the work behind the scenes.
 
+### Desktop workbench
+
+Cog should open into a Mac-style desktop workbench, not only a small chat panel. The shell should include a left sidebar for New Task, Projects, Workflows, Artifacts, Agents, Approvals, Connections, and Settings. The central workspace should show the selected project, workflow, artifact, agent run, or approval queue. The visual direction should be inspired by the clarity of modern desktop agent apps while remaining distinctly ImpactWorks in brand, copy, permissions, and governance behavior.
+
 ### Connect in context
 
 - Request a connection only when the chosen task needs it.

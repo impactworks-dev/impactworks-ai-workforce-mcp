@@ -24,6 +24,50 @@ Messy user intent
 
 Cog is not only a mascot, chat window, or voice-to-text helper. It is the visible operator console for a governed workforce.
 
+## Desktop shell UX direction
+
+The Cog desktop harness should use a focused Mac-style workbench layout similar in spirit to modern desktop agent products: dark shell, left navigation, central workspace, and clear task creation. This is an interaction-model reference, not a license to copy another product's exact brand, iconography, layout measurements, or visual assets.
+
+The first shell should feel more like a compact operations console than a marketing app:
+
+- A native Mac window with a restrained dark interface, clear contrast, and ImpactWorks brand accents.
+- A persistent left sidebar for primary navigation.
+- A prominent **New Task** entry point for rough user intent.
+- Top-level sections for **Projects**, **Workflows**, **Artifacts**, **Agents**, **Approvals**, **Connections**, and **Settings**.
+- Search for projects, tasks, workflows, artifacts, and prior agent runs.
+- A central workspace that changes by section instead of opening a pile of separate chat windows.
+- Account, feedback, settings, and light/dark controls in predictable sidebar positions.
+
+The initial empty state should guide users into creating their first governed project or task. Suggested project templates:
+
+- **AuditFlow** - diagnose workflows, score opportunities, estimate ROI, and produce a roadmap.
+- **Proposal and Follow-Up** - manage qualified leads, draft next steps, and prepare approval-ready proposal artifacts.
+- **Operations Monitor** - watch schedules, receipts, exceptions, overdue approvals, and evidence.
+
+### Navigation model
+
+```text
+New Task
+Projects
+Workflows
+Artifacts
+Agents
+Approvals
+Connections
+Settings
+```
+
+### Key workspace views
+
+- **Projects:** grouped business contexts with shared memory, files, agent runs, approvals, and artifacts.
+- **Workflows:** mapped business processes, owners, systems, permissions, routine versions, and acceptance gates.
+- **Artifacts:** generated reports, proposals, briefs, exports, logs, and evidence packages.
+- **Agents:** available Cloudflare edge agents, current status, allowed tools, owners, schedules, and off switches.
+- **Approvals:** pending actions with destination, affected data, consequence, and approve/edit/reject controls.
+- **Connections:** authorized systems, scopes, agents allowed to use them, expiration, revocation, and audit status.
+
+The visible design should support repeat work. A user should be able to open Cog, see what is running, create or resume a task, review approvals, and find generated artifacts without understanding MCP, Cloudflare, or agent runtime internals.
+
 ## Cloudflare edge-agent role
 
 Cloudflare Agents are the selected default runtime direction for the server-side edge-agent layer behind this harness. They are a strong fit because they provide durable agent identity, local state, real-time connections, scheduling, recoverable work, and sub-agent patterns on top of Durable Objects.
@@ -135,7 +179,7 @@ Turns a demonstrated or repeated process into a draft routine with required tool
 
 ### Phase B - Local harness prototype
 
-- Build a Mac-first Cog shell with text input first and voice later.
+- Build a Mac-first Cog shell with sidebar navigation, project/workflow/artifact views, text input first, and voice later.
 - Display plan previews and approval cards.
 - Connect to mocked or local AuditFlow outputs before production edge orchestration.
 

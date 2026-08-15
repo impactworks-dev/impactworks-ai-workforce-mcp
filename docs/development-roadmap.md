@@ -37,6 +37,7 @@
 - [ ] Guided first-use conversation
 - [ ] Progressive connection and permission flow
 - [ ] Workforce MCP Harness task, plan, approval, evidence, and agent-run contracts
+- [ ] Mac-style desktop shell with sidebar navigation and central project/workflow/artifact workspace
 - [ ] Lemon-style intent capture through text first, then hotkey or voice
 - [ ] First-use approval card
 - [ ] Live AuditFlow result and task progress
