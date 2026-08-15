@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+# Internal planning and operator context are intentionally not published.
+AGENTS.md
+DECISIONS.md
+IMPACTWORKS-MASTER-PLAN.md
+IMPLEMENTATION-BACKLOG.md
+PROJECT_CONTEXT.md
