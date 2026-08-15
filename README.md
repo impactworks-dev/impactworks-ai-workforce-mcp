@@ -6,7 +6,7 @@ This repository contains the public technical foundation for:
 
 - **ImpactWorks AuditFlow** — a deterministic workflow audit, opportunity-scoring, ROI, and roadmap engine.
 - **ImpactWorks MCP capability layer** — bounded, tenant-aware tools shared by compatible agent hosts.
-- **Cog** — the working name for an installable desktop agent and human approval surface.
+- **Cog** — the working name for the installable Workforce MCP Harness: desktop agent, approval surface, and edge-agent control layer.
 - **AgentOps** — quality, observability, governance, and continuous improvement.
 
 > Status: early development. AuditFlow is the first vertical slice. Cog is a working name and not yet a production commitment.
@@ -18,7 +18,7 @@ AuditFlow
   -> AI Workforce Blueprint
   -> Connected foundation
   -> First bounded workflow or agent
-  -> Cog installable experience
+  -> Cog Workforce MCP Harness
   -> AgentOps
 ```
 
@@ -31,6 +31,7 @@ flowchart TD
     Human["Named human owner"] --> Cog["Cog desktop agent and approval surface"]
     Host["Compatible external host"] --> Runtime["Agent runtime"]
     Cog --> Runtime
+    Runtime --> Edge["Edge agents"]
     Runtime --> Gateway["ImpactWorks MCP capability layer"]
     Gateway --> AuditFlow["AuditFlow tools"]
     Gateway --> Systems["Approved business systems"]
@@ -63,7 +64,7 @@ Official scores and ROI come from deterministic, versioned application code—no
 - Versioned ROI scenario engine
 - Boundary and golden tests
 - Public development roadmap
-- Cog onboarding specification informed by current installable-agent patterns
+- Cog onboarding and Workforce MCP Harness specifications informed by current installable-agent patterns
 
 ## Development
 
@@ -88,6 +89,7 @@ docs/
   architecture.md       System and trust architecture
   development-roadmap.md
   cog-onboarding.md
+  cog-workforce-harness-roadmap.md
 ```
 
 ## Operating principles
@@ -106,6 +108,7 @@ docs/
 - [Architecture](docs/architecture.md)
 - [Development roadmap](docs/development-roadmap.md)
 - [Cog install and onboarding](docs/cog-onboarding.md)
+- [Cog Workforce MCP Harness roadmap](docs/cog-workforce-harness-roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
