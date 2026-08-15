@@ -6,6 +6,8 @@ import {
   type CreateAuditInput,
   type EstimateRoiInput,
   type EventId,
+  type GenerateRoadmapInput,
+  type RoadmapId,
   type ScoreOpportunitiesInput,
   type TenantScope,
   type UpsertWorkflowInput,
@@ -35,6 +37,7 @@ export interface AuditFlowServiceDependencies {
   ids: {
     auditId(): AuditId;
     workflowId(): WorkflowId;
+    roadmapId(): RoadmapId;
     eventId(): EventId;
   };
 }
@@ -94,6 +97,29 @@ export interface EstimateRoiServiceResult {
   excluded_benefits: string[];
   confidence: "low" | "medium" | "high";
   disclaimer: string;
+}
+
+export interface RoadmapInitiative {
+  workflow_id: WorkflowId;
+  deliverable: string;
+  owner_role: string;
+  dependencies: string[];
+  success_metric: string;
+  decision_gate: string;
+}
+
+export interface RoadmapPhase {
+  phase: "days_1_30" | "days_31_60" | "days_61_90";
+  objective: string;
+  initiatives: RoadmapInitiative[];
+}
+
+export interface GenerateRoadmapServiceResult {
+  audit_id: AuditId;
+  roadmap_id: RoadmapId;
+  phases: RoadmapPhase[];
+  critical_dependencies: string[];
+  executive_decisions: string[];
 }
 
 export class AuditFlowServiceError extends Error {
@@ -375,6 +401,106 @@ function excludedBenefits(workflows: WorkflowProfile[], includeRevenueUplift: bo
     excluded.unshift("Revenue uplift from faster or more consistent execution");
   }
   return excluded;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
+}
+
+function primaryOwnerRole(workflow: WorkflowProfile): string {
+  const manualOwner = workflow.steps.find((step) => step.manual)?.owner_role;
+  if (manualOwner) return manualOwner;
+  return `${workflow.department} owner`;
+}
+
+function roadmapDependencies(workflow: WorkflowProfile): string[] {
+  const systems = workflow.systems ?? [];
+  return unique([
+    "Named process owner",
+    systems.length > 0 ? `${systems[0]} admin access` : "Source-system access",
+    "Two weeks of baseline data",
+    workflow.data_sensitivity === "regulated" ? "Security and compliance review" : "",
+    (workflow.exception_rate_percent ?? 0) >= 15 ? "Exception handling rules" : "",
+  ]);
+}
+
+function roadmapSuccessMetric(workflow: WorkflowProfile): string {
+  if (workflow.department.toLowerCase().includes("sales")) {
+    return "Owner approves baseline response time, conversion quality, and follow-up completion rate.";
+  }
+  if (workflow.department.toLowerCase().includes("operations")) {
+    return "Owner approves cycle time, exception rate, and manual rework baseline.";
+  }
+  return "Owner approves baseline cycle time, quality, and exception metrics.";
+}
+
+function roadmapDecisionGate(workflow: WorkflowProfile): string {
+  if ((workflow.exception_rate_percent ?? 0) >= 15) {
+    return "Proceed only after the top exceptions are documented and escalation rules are approved.";
+  }
+  if (workflow.data_sensitivity === "regulated") {
+    return "Proceed only after security controls and approval policy are accepted by the named owner.";
+  }
+  return "Proceed if the owner confirms the workflow is bounded, measurable, and safe to pilot.";
+}
+
+function roadmapDeliverable(workflow: WorkflowProfile, phase: RoadmapPhase["phase"]): string {
+  switch (phase) {
+    case "days_1_30":
+      return `Instrument and document ${workflow.name}, including owners, rules, systems, baseline metrics, and approval points.`;
+    case "days_31_60":
+      return `Launch a controlled ${workflow.name} pilot with human review, event logging, and exception handling.`;
+    case "days_61_90":
+      return `Measure ${workflow.name}, harden controls, and prepare the expansion or AgentOps handoff.`;
+  }
+}
+
+function phaseObjective(phase: RoadmapPhase["phase"]): string {
+  switch (phase) {
+    case "days_1_30":
+      return "Validate the best opportunities, establish baselines, and prepare safe implementation.";
+    case "days_31_60":
+      return "Launch controlled pilots with approval gates, logs, and recovery paths.";
+    case "days_61_90":
+      return "Measure outcomes, harden controls, and decide whether to expand, revise, or stop.";
+  }
+}
+
+function roadmapCriticalDependencies(workflows: WorkflowProfile[], capacity: GenerateRoadmapInput["delivery_capacity"]): string[] {
+  const systems = unique(workflows.flatMap((workflow) => workflow.systems ?? []));
+  return unique([
+    "Named business owner for each workflow",
+    "Approved success metrics and baseline period",
+    "Approval policy for consequential external actions",
+    "Audit log and exception review process",
+    systems.length > 0 ? `Access to core systems: ${systems.slice(0, 5).join(", ")}` : "Confirmed source-system access",
+    workflows.some((workflow) => workflow.data_sensitivity === "regulated") ? "Security and compliance review" : "",
+    capacity === "owner_only" ? "Owner availability for weekly review and acceptance" : "",
+  ]);
+}
+
+function roadmapExecutiveDecisions(input: GenerateRoadmapInput, workflows: WorkflowProfile[]): string[] {
+  const decisions = [
+    "Approve the first pilot workflow and named owner",
+    "Approve implementation budget and internal capacity",
+    "Set escalation thresholds and approval authority",
+    "Confirm what results may be used as proof after the internal run",
+  ];
+
+  if (input.delivery_capacity === "implementation_partner" || input.delivery_capacity === "mixed_team") {
+    decisions.push("Confirm implementation partner role, access boundaries, and handoff expectations");
+  }
+  if (workflows.some((workflow) => workflow.data_sensitivity !== "public")) {
+    decisions.push("Approve data-handling controls before production use");
+  }
+
+  return unique(decisions);
+}
+
+function phaseForIndex(index: number, maxParallel: number): RoadmapPhase["phase"] {
+  if (index < maxParallel) return "days_1_30";
+  if (index < maxParallel * 2) return "days_31_60";
+  return "days_61_90";
 }
 
 export function mapWorkflowToOpportunityScoreInput(workflow: WorkflowProfile): OpportunityScoreInput {
@@ -693,4 +819,108 @@ export async function estimateRoiService(
     confidence: estimateRoiConfidence(workflows),
     disclaimer: "These are planning estimates based on supplied assumptions, not guaranteed financial results.",
   };
+}
+
+export async function generateRoadmapService(
+  deps: AuditFlowServiceDependencies,
+  scope: TenantScope,
+  input: GenerateRoadmapInput,
+): Promise<GenerateRoadmapServiceResult> {
+  const audit = await deps.repositories.audits.getAudit(scope, input.audit_id);
+  if (!audit) {
+    throw new AuditFlowServiceError(
+      "AUDIT_NOT_FOUND",
+      "Audit was not found for the current tenant.",
+      false,
+      ["audit_id"],
+    );
+  }
+
+  const workflowRecords = await deps.repositories.workflows.listWorkflows(scope, {
+    auditId: input.audit_id,
+    workflowIds: input.workflow_ids,
+  });
+
+  if (workflowRecords.length !== input.workflow_ids.length) {
+    const foundIds = new Set(workflowRecords.map((workflow) => workflow.workflowId));
+    const missingWorkflowIds = input.workflow_ids.filter((workflowId) => !foundIds.has(workflowId));
+    throw new AuditFlowServiceError(
+      "WORKFLOW_NOT_FOUND",
+      "One or more workflows were not found for the current audit and tenant.",
+      false,
+      missingWorkflowIds,
+    );
+  }
+
+  const unscoreable = workflowRecords.filter((workflow) => !workflow.completeness.scoreable);
+  if (unscoreable.length > 0) {
+    throw new AuditFlowServiceError(
+      "INSUFFICIENT_EVIDENCE",
+      "One or more selected workflows need more evidence before roadmap generation.",
+      true,
+      unscoreable.flatMap((workflow) => workflow.completeness.missingFields),
+    );
+  }
+
+  const maxParallel = input.max_parallel_initiatives ?? 2;
+  const rankedWorkflows = workflowRecords
+    .map((record) => ({
+      ...record,
+      score: scoreOpportunity(mapWorkflowToOpportunityScoreInput(record.workflow)),
+    }))
+    .sort((left, right) => right.score.priorityScore - left.score.priorityScore);
+
+  const phaseNames = ["days_1_30", "days_31_60", "days_61_90"] as const;
+  const phases: RoadmapPhase[] = phaseNames.map((phase) => ({
+    phase,
+    objective: phaseObjective(phase),
+    initiatives: [],
+  }));
+
+  for (const [index, record] of rankedWorkflows.entries()) {
+    const phaseName = phaseForIndex(index, maxParallel);
+    const phase = phases.find((candidate) => candidate.phase === phaseName)!;
+    phase.initiatives.push({
+      workflow_id: record.workflowId,
+      deliverable: roadmapDeliverable(record.workflow, phaseName),
+      owner_role: primaryOwnerRole(record.workflow),
+      dependencies: roadmapDependencies(record.workflow),
+      success_metric: roadmapSuccessMetric(record.workflow),
+      decision_gate: roadmapDecisionGate(record.workflow),
+    });
+  }
+
+  const roadmapId = deps.ids.roadmapId();
+  const now = deps.clock.now();
+  const result: GenerateRoadmapServiceResult = {
+    audit_id: input.audit_id,
+    roadmap_id: roadmapId,
+    phases,
+    critical_dependencies: roadmapCriticalDependencies(
+      rankedWorkflows.map((record) => record.workflow),
+      input.delivery_capacity,
+    ),
+    executive_decisions: roadmapExecutiveDecisions(
+      input,
+      rankedWorkflows.map((record) => record.workflow),
+    ),
+  };
+
+  await deps.repositories.audits.updateAuditStatus(scope, input.audit_id, "roadmap_ready", now);
+  await deps.repositories.events.appendEvent(scope, {
+    eventId: deps.ids.eventId(),
+    auditId: input.audit_id,
+    type: "roadmap.generated",
+    occurredAt: now,
+    payload: {
+      roadmapId,
+      workflowIds: rankedWorkflows.map((workflow) => workflow.workflowId),
+      startDate: input.start_date,
+      deliveryCapacity: input.delivery_capacity ?? "mixed_team",
+      maxParallelInitiatives: maxParallel,
+      phases: result.phases,
+    },
+  });
+
+  return result;
 }

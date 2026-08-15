@@ -8,6 +8,7 @@ import {
   createAuditService,
   createWorkflowRecord,
   estimateRoiService,
+  generateRoadmapService,
   mapWorkflowToOpportunityScoreInput,
   scoreOpportunitiesService,
   upsertWorkflowService,
@@ -145,6 +146,7 @@ function buildServiceDeps(repositories = buildDeps()) {
     ids: {
       auditId: () => "aud_01JZ6K8M" as const,
       workflowId: () => "wf_leadfollowup" as const,
+      roadmapId: () => "rm_01JZ74TP" as const,
       eventId: () => `evt_${++eventCounter}` as EventId,
     },
   };
@@ -566,6 +568,123 @@ test("estimateRoiService fails closed across tenant boundaries", async () => {
   await assert.rejects(
     () =>
       estimateRoiService(
+        deps,
+        { tenantId: "ten_other", actorUserId: "usr_other" },
+        {
+          audit_id: "aud_01JZ6K8M",
+          workflow_ids: ["wf_leadfollowup"],
+        },
+      ),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "AUDIT_NOT_FOUND");
+      return true;
+    },
+  );
+});
+
+test("generateRoadmapService creates a sequenced 30/60/90 roadmap and logs governance evidence", async () => {
+  const { deps, repositories } = await createAuditWithScoreableWorkflows();
+
+  const result = await generateRoadmapService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_ids: ["wf_leadfollowup", "wf_proposal", "wf_weeklyreporting"],
+    start_date: "2026-08-15",
+    delivery_capacity: "mixed_team",
+    max_parallel_initiatives: 1,
+  });
+
+  assert.equal(result.audit_id, "aud_01JZ6K8M");
+  assert.equal(result.roadmap_id, "rm_01JZ74TP");
+  assert.deepEqual(
+    result.phases.map((phase) => phase.phase),
+    ["days_1_30", "days_31_60", "days_61_90"],
+  );
+  assert.deepEqual(
+    result.phases.flatMap((phase) => phase.initiatives.map((initiative) => initiative.workflow_id)),
+    ["wf_proposal", "wf_leadfollowup", "wf_weeklyreporting"],
+  );
+  assert.equal(result.phases[0].initiatives[0].owner_role, "Owner");
+  assert.ok(result.phases[0].initiatives[0].deliverable.includes("Instrument and document Proposal assembly"));
+  assert.ok(result.phases[0].initiatives[0].dependencies.includes("Named process owner"));
+  assert.ok(result.critical_dependencies.includes("Named business owner for each workflow"));
+  assert.ok(result.executive_decisions.includes("Approve the first pilot workflow and named owner"));
+  assert.equal((await repositories.audits.getAudit(scope, "aud_01JZ6K8M"))?.status, "roadmap_ready");
+  assert.equal(repositories.events.events.at(-1)?.type, "roadmap.generated");
+  assert.deepEqual(repositories.events.events.at(-1)?.payload.workflowIds, [
+    "wf_proposal",
+    "wf_leadfollowup",
+    "wf_weeklyreporting",
+  ]);
+});
+
+test("generateRoadmapService respects max parallel initiatives", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  const result = await generateRoadmapService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_ids: ["wf_leadfollowup", "wf_proposal", "wf_weeklyreporting"],
+    max_parallel_initiatives: 2,
+  });
+
+  assert.equal(result.phases[0].initiatives.length, 2);
+  assert.equal(result.phases[1].initiatives.length, 1);
+  assert.equal(result.phases[2].initiatives.length, 0);
+});
+
+test("generateRoadmapService rejects missing workflows", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  await assert.rejects(
+    () =>
+      generateRoadmapService(deps, scope, {
+        audit_id: "aud_01JZ6K8M",
+        workflow_ids: ["wf_leadfollowup", "wf_missing"],
+      }),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "WORKFLOW_NOT_FOUND");
+      assert.deepEqual(error.missing, ["wf_missing"]);
+      return true;
+    },
+  );
+});
+
+test("generateRoadmapService rejects selected workflows with insufficient evidence", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+  await upsertWorkflowService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_id: "wf_unready",
+    workflow: {
+      ...workflow,
+      name: "Unready workflow",
+      monthly_volume: 0,
+      minutes_per_run: 0,
+      evidence_quality: "unknown",
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      generateRoadmapService(deps, scope, {
+        audit_id: "aud_01JZ6K8M",
+        workflow_ids: ["wf_unready"],
+      }),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "INSUFFICIENT_EVIDENCE");
+      assert.ok(error.missing.includes("workflow.minutes_per_run"));
+      return true;
+    },
+  );
+});
+
+test("generateRoadmapService fails closed across tenant boundaries", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  await assert.rejects(
+    () =>
+      generateRoadmapService(
         deps,
         { tenantId: "ten_other", actorUserId: "usr_other" },
         {
