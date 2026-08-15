@@ -5,19 +5,20 @@
 - [x] Deterministic opportunity scoring
 - [x] Deterministic ROI scenarios
 - [x] Golden and boundary tests
-- [ ] Runtime-validated canonical tool contracts
-- [ ] Audit and workflow domain entities
-- [ ] Completeness and evidence-confidence policies
-- [ ] Tenant-scoped repository interfaces
-- [ ] AuditFlow application services
-- [ ] Contract and cross-tenant denial tests
+- [x] Runtime-validated canonical tool contracts
+- [x] Audit and workflow domain entities
+- [x] Completeness and evidence-confidence policies
+- [x] Tenant-scoped repository interfaces
+- [x] AuditFlow application services
+- [x] Contract and cross-tenant denial tests
 
 ## Phase 2 — MCP vertical slice
 
 - [ ] Streamable HTTP MCP server
-- [ ] Authentication and tenant middleware
-- [ ] Six-tool golden path plus solution-stack contract
-- [ ] Stable error envelope and recovery actions
+- [x] Stdio-compatible MCP JSON-RPC adapter
+- [x] Trusted tenant-scope injection boundary
+- [x] Six-tool golden path plus solution-stack contract
+- [x] Stable error envelope for tool-originated failures
 - [ ] Audit event log and evidence projection
 - [ ] First supported host integration
 - [ ] Synthetic audit evaluation harness
