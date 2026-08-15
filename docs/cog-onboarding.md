@@ -1,6 +1,6 @@
 # Cog Install and Onboarding Experience
 
-Status: product requirement for the Cog proof. Cog remains a working name.
+Status: product requirement for the Cog proof. Cog remains a working name and is now expected to act as the Workforce MCP Harness.
 
 ## Research basis
 
@@ -43,6 +43,10 @@ Download
 ### Conversation before configuration
 
 The first screen asks one outcome question, not for integrations or technical settings. Cog translates that outcome into the smallest required capability set.
+
+### Workforce harness behavior
+
+Cog should capture rough intent through text first, then hotkey or voice, clean it into a proposed task, preview the plan and permissions, and route approved work to MCP tools or edge agents. The user should experience one visible harness even when durable specialist agents do the work behind the scenes.
 
 ### Connect in context
 
@@ -100,6 +104,7 @@ flowchart LR
     Client --> Runtime["Agent runtime"]
     Runtime --> Policy["Policy and approval engine"]
     Policy --> MCP["MCP and API capabilities"]
+    Policy --> Edge["Edge agents"]
     Policy --> UI["Supervised UI worker"]
     Runtime --> Memory["Scoped memory and routines"]
     Runtime --> Evidence["Progress, logs, evidence, recovery"]

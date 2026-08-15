@@ -36,10 +36,20 @@
 - [ ] Account and tenant bootstrap
 - [ ] Guided first-use conversation
 - [ ] Progressive connection and permission flow
+- [ ] Workforce MCP Harness task, plan, approval, evidence, and agent-run contracts
+- [ ] Lemon-style intent capture through text first, then hotkey or voice
 - [ ] First-use approval card
 - [ ] Live AuditFlow result and task progress
 - [ ] Routine demonstration and review flow
 - [ ] Connection revocation and off switch
+
+## Phase 4B — Edge-agent harness proof
+
+- [ ] Evaluate Cloudflare Agents as the default edge-agent runtime
+- [ ] Implement one bounded edge-agent proof for AuditFlow or Proposal and Follow-Up
+- [ ] Persist agent state, progress, evidence, approvals, and recovery status
+- [ ] Demonstrate pause/resume, blocked state, retry, and owner escalation
+- [ ] Verify edge agents cannot bypass approval or tenant boundaries
 
 ## Phase 5 — Controlled pilot
 
