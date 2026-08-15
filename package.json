@@ -6,6 +6,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "start:auditflow-mcp:http": "node --experimental-strip-types packages/auditflow-mcp/src/http.ts",
+    "start:auditflow-mcp:stdio": "node --experimental-strip-types packages/auditflow-mcp/src/stdio.ts"
   }
 }

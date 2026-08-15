@@ -14,11 +14,13 @@
 
 ## Phase 2 — MCP vertical slice
 
-- [ ] Streamable HTTP MCP server
+- [x] Minimal Streamable HTTP MCP server for local proof work
 - [x] Stdio-compatible MCP JSON-RPC adapter
 - [x] Trusted tenant-scope injection boundary
 - [x] Six-tool golden path plus solution-stack contract
 - [x] Stable error envelope for tool-originated failures
+- [x] Bearer-token tenant middleware for local proof work
+- [ ] Production OAuth 2.1 resource-server validation
 - [ ] Audit event log and evidence projection
 - [ ] First supported host integration
 - [ ] Synthetic audit evaluation harness

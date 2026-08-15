@@ -65,6 +65,7 @@ Official scores and ROI come from deterministic, versioned application code—no
 - Tenant-scoped AuditFlow services for create, workflow capture, scoring, ROI, roadmap, solution stack, and report generation
 - Host-neutral AuditFlow tool dispatcher with an in-memory runtime for golden-path testing
 - MCP-shaped JSON-RPC adapter for initialization, deterministic tool listing, structured tool calls, and stdio execution
+- Minimal Streamable HTTP MCP endpoint with bearer-token tenant scope middleware for local proof work
 - Boundary and golden tests
 - Public development roadmap
 - Cog onboarding specification informed by current installable-agent patterns
@@ -88,7 +89,7 @@ Repository layout:
 packages/
   scoring-engine/       Deterministic scores and ROI
   auditflow-contracts/  Runtime contracts, validation, domain entities, and services
-  auditflow-mcp/        Host-neutral tool dispatcher, MCP adapter, stdio runner, and in-memory runtime
+  auditflow-mcp/        Host-neutral tool dispatcher, MCP adapters, stdio/HTTP runners, and in-memory runtime
 tests/                  Node test suite
 docs/
   architecture.md       System and trust architecture

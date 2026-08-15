@@ -3,6 +3,12 @@ export {
   isAuditFlowToolName,
 } from "./handlers.ts";
 export {
+  createEnvBearerScopeResolver,
+  createStaticBearerScopeResolver,
+  handleAuditFlowMcpHttpRequest,
+  startAuditFlowMcpHttpServer,
+} from "./http.ts";
+export {
   AUDITFLOW_MCP_PROTOCOL_VERSION,
   createAuditFlowMcpProtocolServer,
   listAuditFlowMcpTools,
@@ -23,6 +29,16 @@ export type {
   AuditFlowToolResult,
   AuditFlowToolSuccess,
 } from "./handlers.ts";
+export type {
+  AuditFlowBearerTokenResolver,
+  AuditFlowHttpAuthContext,
+  AuditFlowHttpEnvironment,
+  AuditFlowHttpRequest,
+  AuditFlowHttpResponse,
+  AuditFlowHttpRuntimeOptions,
+  AuditFlowHttpServerOptions,
+  StartedAuditFlowHttpServer,
+} from "./http.ts";
 export type {
   AuditFlowMcpProtocolServer,
   AuditFlowMcpProtocolServerOptions,
