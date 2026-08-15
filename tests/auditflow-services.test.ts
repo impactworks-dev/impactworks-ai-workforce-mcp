@@ -7,6 +7,8 @@ import {
   createAuditRecord,
   createAuditService,
   createWorkflowRecord,
+  mapWorkflowToOpportunityScoreInput,
+  scoreOpportunitiesService,
   upsertWorkflowService,
   type AppendAuditEventInput,
   type AuditEventRepository,
@@ -22,6 +24,7 @@ import {
   type WorkflowRecord,
   type WorkflowRepository,
 } from "../packages/auditflow-contracts/src/index.ts";
+import { scoreOpportunity } from "../packages/scoring-engine/src/opportunity-score.ts";
 
 const scope: TenantScope = {
   tenantId: "ten_impactworks",
@@ -262,6 +265,201 @@ test("upsertWorkflowService fails closed when audit is outside the current tenan
           missing: ["audit_id"],
         },
       });
+      return true;
+    },
+  );
+});
+
+async function createAuditWithScoreableWorkflows() {
+  const repositories = buildDeps();
+  const deps = buildServiceDeps(repositories);
+  await createAuditService(deps, scope, {
+    business: {
+      name: "ImpactWorks",
+      industry: "AI consulting",
+      employee_count: 2,
+      primary_goal: "increase_capacity",
+      annual_revenue_usd: 500_000,
+    },
+    constraints: {
+      budget_range_usd: { min: 5_000, max: 25_000 },
+      target_timeline_days: 45,
+    },
+  });
+
+  await upsertWorkflowService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_id: "wf_leadfollowup",
+    workflow,
+  });
+  await upsertWorkflowService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_id: "wf_proposal",
+    workflow: {
+      ...workflow,
+      name: "Proposal assembly",
+      department: "Sales",
+      trigger: "A qualified prospect requests a proposal.",
+      desired_outcome: "Approval-ready proposal is prepared with the right scope and follow-up.",
+      monthly_volume: 18,
+      minutes_per_run: 75,
+      systems: ["ClickUp", "Google Drive", "PandaDoc"],
+      pain_points: ["Proposal details are scattered", "Follow-up timing varies"],
+      annual_revenue_at_risk_usd: 60_000,
+      evidence_quality: "measured",
+    },
+  });
+  await upsertWorkflowService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_id: "wf_weeklyreporting",
+    workflow: {
+      ...workflow,
+      name: "Weekly operating report",
+      department: "Operations",
+      trigger: "Friday operating review is due.",
+      desired_outcome: "Current project health is summarized with blockers and next actions.",
+      monthly_volume: 4,
+      minutes_per_run: 120,
+      systems: ["ClickUp", "Google Sheets"],
+      pain_points: ["Status must be assembled manually"],
+      evidence_quality: "team_estimate",
+      data_sensitivity: "internal",
+      exception_rate_percent: 5,
+    },
+  });
+
+  return { deps, repositories };
+}
+
+test("mapWorkflowToOpportunityScoreInput produces deterministic normalized scoring inputs", () => {
+  const input = mapWorkflowToOpportunityScoreInput(workflow);
+  const result = scoreOpportunity(input);
+
+  assert.deepEqual(input.impact, {
+    laborValue: 30,
+    volume: 18,
+    errorCost: 0,
+    customerImpact: 45,
+    revenueImpact: 0,
+  });
+  assert.equal(input.risk, 29.75);
+  assert.equal(result.scoringVersion, "iwaf-1.0.0");
+  assert.equal(result.priorityScore, 45.43);
+});
+
+test("scoreOpportunitiesService scores at least three workflows, sorts priorities, updates status, and logs event", async () => {
+  const { deps, repositories } = await createAuditWithScoreableWorkflows();
+
+  const result = await scoreOpportunitiesService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+  });
+
+  assert.equal(result.audit_id, "aud_01JZ6K8M");
+  assert.equal(result.scoring_version, "iwaf-1.0.0");
+  assert.equal(result.opportunities.length, 3);
+  assert.deepEqual(
+    result.opportunities.map((opportunity) => opportunity.workflow_id),
+    ["wf_proposal", "wf_leadfollowup", "wf_weeklyreporting"],
+  );
+  assert.equal(result.opportunities[0].automation_pattern, "workflow_orchestration");
+  assert.ok(result.opportunities[0].priority_score >= result.opportunities[1].priority_score);
+  assert.ok(result.opportunities[0].reasons.some((reason) => reason.includes("monthly runs")));
+  assert.equal((await repositories.audits.getAudit(scope, "aud_01JZ6K8M"))?.status, "scored");
+  assert.equal(repositories.events.events.at(-1)?.type, "opportunities.scored");
+  assert.deepEqual(repositories.events.events.at(-1)?.payload, {
+    scoringVersion: "iwaf-1.0.0",
+    workflowIds: ["wf_proposal", "wf_leadfollowup", "wf_weeklyreporting"],
+    forceRecalculate: false,
+  });
+});
+
+test("scoreOpportunitiesService can score an explicit scoreable workflow set", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  const result = await scoreOpportunitiesService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_ids: ["wf_weeklyreporting", "wf_leadfollowup", "wf_proposal"],
+    force_recalculate: true,
+  });
+
+  assert.equal(result.opportunities.length, 3);
+  assert.deepEqual(
+    result.opportunities.map((opportunity) => opportunity.workflow_id).sort(),
+    ["wf_leadfollowup", "wf_proposal", "wf_weeklyreporting"],
+  );
+});
+
+test("scoreOpportunitiesService requires three scoreable workflows", async () => {
+  const repositories = buildDeps();
+  const deps = buildServiceDeps(repositories);
+  await createAuditService(deps, scope, {
+    business: {
+      name: "ImpactWorks",
+      industry: "AI consulting",
+      employee_count: 2,
+      primary_goal: "increase_capacity",
+    },
+  });
+  await upsertWorkflowService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_id: "wf_leadfollowup",
+    workflow,
+  });
+
+  await assert.rejects(
+    () => scoreOpportunitiesService(deps, scope, { audit_id: "aud_01JZ6K8M" }),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "INSUFFICIENT_WORKFLOWS");
+      assert.deepEqual(error.missing, ["workflows:minimum_3_scoreable"]);
+      return true;
+    },
+  );
+});
+
+test("scoreOpportunitiesService rejects selected workflows with insufficient evidence", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+  await upsertWorkflowService(deps, scope, {
+    audit_id: "aud_01JZ6K8M",
+    workflow_id: "wf_unready",
+    workflow: {
+      ...workflow,
+      name: "Unready workflow",
+      monthly_volume: 0,
+      minutes_per_run: 0,
+      evidence_quality: "unknown",
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      scoreOpportunitiesService(deps, scope, {
+        audit_id: "aud_01JZ6K8M",
+        workflow_ids: ["wf_leadfollowup", "wf_proposal", "wf_unready"],
+      }),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "INSUFFICIENT_EVIDENCE");
+      assert.ok(error.missing.includes("workflow.monthly_volume"));
+      assert.ok(error.missing.includes("workflow.minutes_per_run"));
+      return true;
+    },
+  );
+});
+
+test("scoreOpportunitiesService fails closed across tenant boundaries", async () => {
+  const { deps } = await createAuditWithScoreableWorkflows();
+
+  await assert.rejects(
+    () =>
+      scoreOpportunitiesService(
+        deps,
+        { tenantId: "ten_other", actorUserId: "usr_other" },
+        { audit_id: "aud_01JZ6K8M" },
+      ),
+    (error) => {
+      assert.ok(error instanceof AuditFlowServiceError);
+      assert.equal(error.code, "AUDIT_NOT_FOUND");
       return true;
     },
   );

@@ -14,6 +14,8 @@ export {
 export {
   AuditFlowServiceError,
   createAuditService,
+  mapWorkflowToOpportunityScoreInput,
+  scoreOpportunitiesService,
   upsertWorkflowService,
 } from "./services.ts";
 export type {
@@ -42,6 +44,8 @@ export type {
 export type {
   AuditFlowServiceDependencies,
   CreateAuditServiceResult,
+  ScoredOpportunity,
+  ScoreOpportunitiesServiceResult,
   UpsertWorkflowServiceResult,
 } from "./services.ts";
 
