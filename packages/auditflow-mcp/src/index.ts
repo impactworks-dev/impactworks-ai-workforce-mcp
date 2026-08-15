@@ -18,6 +18,16 @@ export {
   validateJwtAccessToken,
 } from "./oauth.ts";
 export {
+  CHATGPT_AUDITFLOW_READ_SCOPE,
+  CHATGPT_AUDITFLOW_SERVER_LABEL,
+  CHATGPT_AUDITFLOW_WRITE_SCOPE,
+  auditFlowToolScopes,
+  auditFlowToolSecuritySchemes,
+  createChatGptAuditFlowRemoteMcpTool,
+  createChatGptResponsesApiExample,
+  defaultChatGptApprovalPolicy,
+} from "./chatgpt.ts";
+export {
   AUDITFLOW_MCP_PROTOCOL_VERSION,
   createAuditFlowMcpProtocolServer,
   listAuditFlowMcpTools,
@@ -55,6 +65,13 @@ export type {
   AuditFlowOAuthValidationFailureReason,
   AuditFlowProtectedResourceMetadata,
 } from "./oauth.ts";
+export type {
+  ChatGptAuditFlowIntegrationOptions,
+  ChatGptMcpAllowedTools,
+  ChatGptMcpApprovalPolicy,
+  ChatGptRemoteMcpToolConfig,
+  ChatGptToolSecurityScheme,
+} from "./chatgpt.ts";
 export type {
   AuditFlowMcpProtocolServer,
   AuditFlowMcpProtocolServerOptions,

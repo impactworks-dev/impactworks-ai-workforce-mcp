@@ -10,6 +10,10 @@ import {
   isAuditFlowToolName,
   type AuditFlowToolResult,
 } from "./handlers.ts";
+import {
+  auditFlowToolSecuritySchemes,
+  type ChatGptToolSecurityScheme,
+} from "./chatgpt.ts";
 
 export const AUDITFLOW_MCP_PROTOCOL_VERSION = "2025-06-18";
 
@@ -59,6 +63,10 @@ export interface McpToolDefinition {
   title: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  securitySchemes: ChatGptToolSecurityScheme[];
+  _meta: {
+    securitySchemes: ChatGptToolSecurityScheme[];
+  };
   annotations: {
     readOnlyHint: boolean;
     destructiveHint: false;
@@ -507,11 +515,16 @@ function descriptionForTool(toolName: AuditFlowToolName): string {
 export function listAuditFlowMcpTools(): McpToolDefinition[] {
   return AUDITFLOW_TOOL_NAMES.map((toolName) => {
     const isMutating = mutatingTools.has(toolName);
+    const securitySchemes = auditFlowToolSecuritySchemes(toolName);
     return {
       name: toolName,
       title: titleForTool(toolName),
       description: descriptionForTool(toolName),
       inputSchema: inputSchemaForTool(toolName),
+      securitySchemes,
+      _meta: {
+        securitySchemes,
+      },
       annotations: {
         readOnlyHint: !isMutating,
         destructiveHint: false,
@@ -642,4 +655,3 @@ export function createAuditFlowMcpProtocolServer(
     },
   };
 }
-

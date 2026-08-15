@@ -23,7 +23,9 @@
 - [x] Production-shaped OAuth 2.1 resource-server validation
 - [x] Protected resource metadata for authorization-server discovery
 - [x] JWT issuer, audience, expiry, scope, and trusted-claims tenant validation
+- [x] ChatGPT/OpenAI remote MCP integration contract
 - [ ] Audit event log and evidence projection
+- [ ] Live ChatGPT developer-mode connection test
 - [ ] First supported host integration
 - [ ] Synthetic audit evaluation harness
 
