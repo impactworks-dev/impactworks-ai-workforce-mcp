@@ -1,5 +1,14 @@
 export const AUDITFLOW_CONTRACT_VERSION = "auditflow-contracts-1.0.0";
 
+export {
+  evaluateWorkflowCompleteness,
+  WORKFLOW_COMPLETENESS_VERSION,
+} from "./completeness.ts";
+export type {
+  EvidenceConfidence,
+  WorkflowCompletenessResult,
+} from "./completeness.ts";
+
 export const AUDITFLOW_TOOL_NAMES = [
   "create_audit",
   "upsert_workflow",
