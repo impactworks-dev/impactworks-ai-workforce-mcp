@@ -16,7 +16,9 @@ export {
   createAuditService,
   estimateRoiService,
   generateRoadmapService,
+  getAuditReportService,
   mapWorkflowToOpportunityScoreInput,
+  recommendSolutionStackService,
   scoreOpportunitiesService,
   upsertWorkflowService,
 } from "./services.ts";
@@ -49,10 +51,15 @@ export type {
   EstimateRoiScenario,
   EstimateRoiServiceResult,
   GenerateRoadmapServiceResult,
+  GetAuditReportServiceResult,
   RoadmapInitiative,
   RoadmapPhase,
+  AuditReportSprintFit,
+  AuditReportTopOpportunity,
+  RecommendSolutionStackServiceResult,
   ScoredOpportunity,
   ScoreOpportunitiesServiceResult,
+  SolutionRecommendation,
   UpsertWorkflowServiceResult,
 } from "./services.ts";
 

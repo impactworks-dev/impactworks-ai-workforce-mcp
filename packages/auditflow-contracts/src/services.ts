@@ -1,5 +1,6 @@
 import {
   evaluateWorkflowCompleteness,
+  type AuditRecord,
   type AuditFlowErrorCode,
   type AuditFlowRepositories,
   type AuditId,
@@ -7,12 +8,15 @@ import {
   type EstimateRoiInput,
   type EventId,
   type GenerateRoadmapInput,
+  type GetAuditReportInput,
+  type RecommendSolutionStackInput,
   type RoadmapId,
   type ScoreOpportunitiesInput,
   type TenantScope,
   type UpsertWorkflowInput,
   type WorkflowProfile,
   type WorkflowId,
+  type WorkflowRecord,
 } from "./index.ts";
 import {
   SCORING_VERSION,
@@ -120,6 +124,66 @@ export interface GenerateRoadmapServiceResult {
   phases: RoadmapPhase[];
   critical_dependencies: string[];
   executive_decisions: string[];
+}
+
+export interface SolutionRecommendation {
+  workflow_id: WorkflowId;
+  architecture_pattern: string;
+  capabilities: string[];
+  example_products: string[];
+  human_review_points: string[];
+  security_controls: string[];
+  implementation_complexity: "low" | "medium" | "high";
+}
+
+export interface RecommendSolutionStackServiceResult {
+  audit_id: AuditId;
+  recommendations: SolutionRecommendation[];
+}
+
+export interface AuditReportTopOpportunity {
+  rank: number;
+  workflow_id: WorkflowId;
+  name: string;
+  priority_score: number;
+  expected_annual_net_benefit_usd: number | null;
+}
+
+export interface AuditReportSprintFit {
+  qualified: boolean;
+  fit_score: number;
+  recommended_sprint: string | null;
+  scope: string[];
+  reasons: string[];
+  next_step: string;
+}
+
+export interface GetAuditReportServiceResult {
+  audit_id: AuditId;
+  report_version: "1.0";
+  generated_at: string;
+  status: "draft" | "decision_ready" | "complete";
+  business_snapshot: {
+    name: string;
+    industry: string;
+    employee_count: number;
+    primary_goal: string;
+  };
+  executive_summary: string;
+  top_opportunities: AuditReportTopOpportunity[];
+  roi_summary: {
+    expected_annual_net_benefit_usd: number | null;
+    expected_first_year_roi_percent: number | null;
+    confidence: "low" | "medium" | "high";
+  };
+  roadmap_summary: {
+    first_move: string | null;
+    days: 90;
+    max_parallel_initiatives: number;
+  };
+  evidence_gaps: string[];
+  risks: string[];
+  sprint_fit: AuditReportSprintFit;
 }
 
 export class AuditFlowServiceError extends Error {
@@ -403,6 +467,40 @@ function excludedBenefits(workflows: WorkflowProfile[], includeRevenueUplift: bo
   return excluded;
 }
 
+function buildEstimateRoiResult(
+  audit: AuditRecord,
+  input: EstimateRoiInput,
+  workflowRecords: WorkflowRecord[],
+): EstimateRoiServiceResult {
+  const workflows = workflowRecords.map((record) => record.workflow);
+  const assumptions = adjustedScenarioAssumptions(input);
+  const roiInputs = aggregateRoiInputs(workflows, audit.defaultLoadedHourlyRateUsd, input);
+  const scenarios = (["low", "expected", "high"] as const).map((name) => {
+    const result = calculateRoiScenario(roiInputs, assumptions[name]);
+    return {
+      name,
+      annual_hours_recovered: result.annualHoursRecovered,
+      annual_labor_value_usd: result.annualLaborValue,
+      annual_error_reduction_value_usd: result.annualErrorReductionValue,
+      annual_revenue_uplift_usd: result.annualRevenueUplift,
+      annual_net_benefit_usd: result.annualNetBenefit,
+      first_year_roi_percent: result.firstYearRoiPercent,
+      payback_months: result.paybackMonths,
+    };
+  });
+
+  return {
+    audit_id: input.audit_id,
+    currency: "USD",
+    roi_version: ROI_VERSION,
+    scenarios,
+    assumptions: roiAssumptions(workflows, roiInputs, assumptions),
+    excluded_benefits: excludedBenefits(workflows, input.include_revenue_uplift),
+    confidence: estimateRoiConfidence(workflows),
+    disclaimer: "These are planning estimates based on supplied assumptions, not guaranteed financial results.",
+  };
+}
+
 function unique(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
@@ -501,6 +599,269 @@ function phaseForIndex(index: number, maxParallel: number): RoadmapPhase["phase"
   if (index < maxParallel) return "days_1_30";
   if (index < maxParallel * 2) return "days_31_60";
   return "days_61_90";
+}
+
+function buildRoadmapResult(
+  auditId: AuditId,
+  roadmapId: RoadmapId,
+  input: GenerateRoadmapInput,
+  workflowRecords: WorkflowRecord[],
+): GenerateRoadmapServiceResult {
+  const maxParallel = input.max_parallel_initiatives ?? 2;
+  const rankedWorkflows = rankedWorkflowRecords(workflowRecords);
+  const phaseNames = ["days_1_30", "days_31_60", "days_61_90"] as const;
+  const phases: RoadmapPhase[] = phaseNames.map((phase) => ({
+    phase,
+    objective: phaseObjective(phase),
+    initiatives: [],
+  }));
+
+  for (const [index, record] of rankedWorkflows.entries()) {
+    const phaseName = phaseForIndex(index, maxParallel);
+    const phase = phases.find((candidate) => candidate.phase === phaseName)!;
+    phase.initiatives.push({
+      workflow_id: record.workflowId,
+      deliverable: roadmapDeliverable(record.workflow, phaseName),
+      owner_role: primaryOwnerRole(record.workflow),
+      dependencies: roadmapDependencies(record.workflow),
+      success_metric: roadmapSuccessMetric(record.workflow),
+      decision_gate: roadmapDecisionGate(record.workflow),
+    });
+  }
+
+  return {
+    audit_id: auditId,
+    roadmap_id: roadmapId,
+    phases,
+    critical_dependencies: roadmapCriticalDependencies(
+      rankedWorkflows.map((record) => record.workflow),
+      input.delivery_capacity,
+    ),
+    executive_decisions: roadmapExecutiveDecisions(
+      input,
+      rankedWorkflows.map((record) => record.workflow),
+    ),
+  };
+}
+
+async function requireAudit(
+  deps: AuditFlowServiceDependencies,
+  scope: TenantScope,
+  auditId: AuditId,
+): Promise<AuditRecord> {
+  const audit = await deps.repositories.audits.getAudit(scope, auditId);
+  if (!audit) {
+    throw new AuditFlowServiceError(
+      "AUDIT_NOT_FOUND",
+      "Audit was not found for the current tenant.",
+      false,
+      ["audit_id"],
+    );
+  }
+  return audit;
+}
+
+async function requireWorkflowRecords(
+  deps: AuditFlowServiceDependencies,
+  scope: TenantScope,
+  auditId: AuditId,
+  workflowIds: WorkflowId[],
+  purpose: "scoring" | "ROI estimation" | "roadmap generation" | "solution recommendation",
+): Promise<WorkflowRecord[]> {
+  const workflowRecords = await deps.repositories.workflows.listWorkflows(scope, {
+    auditId,
+    workflowIds,
+  });
+
+  if (workflowRecords.length !== workflowIds.length) {
+    const foundIds = new Set(workflowRecords.map((workflow) => workflow.workflowId));
+    const missingWorkflowIds = workflowIds.filter((workflowId) => !foundIds.has(workflowId));
+    throw new AuditFlowServiceError(
+      "WORKFLOW_NOT_FOUND",
+      "One or more workflows were not found for the current audit and tenant.",
+      false,
+      missingWorkflowIds,
+    );
+  }
+
+  const unscoreable = workflowRecords.filter((workflow) => !workflow.completeness.scoreable);
+  if (unscoreable.length > 0) {
+    throw new AuditFlowServiceError(
+      "INSUFFICIENT_EVIDENCE",
+      `One or more selected workflows need more evidence before ${purpose}.`,
+      true,
+      unscoreable.flatMap((workflow) => workflow.completeness.missingFields),
+    );
+  }
+
+  return workflowRecords;
+}
+
+function rankedWorkflowRecords(workflowRecords: WorkflowRecord[]) {
+  return workflowRecords
+    .map((record) => ({
+      ...record,
+      score: scoreOpportunity(mapWorkflowToOpportunityScoreInput(record.workflow)),
+    }))
+    .sort((left, right) => right.score.priorityScore - left.score.priorityScore);
+}
+
+function workflowCapabilities(workflow: WorkflowProfile): string[] {
+  const capabilities = ["workflow intake", "rules-based routing", "audit log", "exception queue"];
+  const systems = workflow.systems ?? [];
+  const nameAndTrigger = `${workflow.name} ${workflow.trigger}`.toLowerCase();
+
+  if (systems.length >= 2) capabilities.push("system sync");
+  if (nameAndTrigger.includes("lead") || nameAndTrigger.includes("prospect")) {
+    capabilities.push("lead classification", "SLA timer", "message draft generation");
+  }
+  if (nameAndTrigger.includes("proposal") || nameAndTrigger.includes("quote")) {
+    capabilities.push("proposal assembly", "approval workflow", "document generation");
+  }
+  if (nameAndTrigger.includes("report")) {
+    capabilities.push("scheduled data collection", "status summarization", "review packet generation");
+  }
+  if (workflow.data_sensitivity !== "public") capabilities.push("PII-aware logging");
+
+  return unique(capabilities);
+}
+
+function architecturePattern(workflow: WorkflowProfile): string {
+  const systems = workflow.systems ?? [];
+  const pattern = automationPattern(workflow);
+  if (workflow.data_sensitivity === "regulated") {
+    return "Governed human-in-the-loop workflow with security review, approval gates, and restricted data handling";
+  }
+  if (pattern === "workflow_orchestration") {
+    return "Event-driven workflow orchestration with rules-based routing, AI-assisted classification, and human escalation";
+  }
+  if (pattern === "human_in_the_loop_assistance") {
+    return "Human-in-the-loop assistant that drafts, checks, and queues work for owner approval";
+  }
+  if (systems.length > 0) {
+    return "System integration workflow with synchronized records, exception handling, and audit evidence";
+  }
+  return "Process-discovery workflow that instruments the current work before automation";
+}
+
+function exampleProducts(preference: RecommendSolutionStackInput["preference"], allowNamedProducts: boolean): string[] {
+  if (!allowNamedProducts) return [];
+
+  switch (preference ?? "balanced") {
+    case "lowest_cost":
+      return ["n8n", "Google Workspace", "OpenAI API"];
+    case "fastest_launch":
+      return ["Zapier", "Make", "HubSpot", "OpenAI API"];
+    case "most_scalable":
+      return ["Cloudflare Agents", "PostgreSQL", "OpenAI API", "Queue-based worker runtime"];
+    case "least_change":
+      return ["Existing CRM", "Google Workspace", "ClickUp", "OpenAI API"];
+    case "balanced":
+      return ["Make", "Zapier", "ClickUp", "OpenAI API"];
+  }
+}
+
+function humanReviewPoints(workflow: WorkflowProfile): string[] {
+  return unique([
+    "Low-confidence classification or summary",
+    "External messages before sending",
+    "Client commitments, quotes, or scope changes",
+    workflow.data_sensitivity !== "public" ? "Sensitive-data handling exceptions" : "",
+    (workflow.exception_rate_percent ?? 0) >= 15 ? "Unusual exceptions outside documented rules" : "",
+  ]);
+}
+
+function securityControls(workflow: WorkflowProfile): string[] {
+  return unique([
+    "Least-privilege OAuth scopes",
+    "Tenant-scoped records and tool access",
+    "90-day audit log minimum",
+    "Prompt-injection filtering for external content",
+    workflow.data_sensitivity !== "public" ? "PII redaction in logs" : "",
+    workflow.data_sensitivity === "regulated" ? "Security and compliance approval before production use" : "",
+  ]);
+}
+
+function implementationComplexity(workflow: WorkflowProfile): SolutionRecommendation["implementation_complexity"] {
+  const systems = workflow.systems?.length ?? 0;
+  const exceptionRate = workflow.exception_rate_percent ?? 0;
+  if (workflow.data_sensitivity === "regulated" || systems >= 4 || exceptionRate >= 25) return "high";
+  if (systems >= 2 || exceptionRate >= 10 || workflow.steps.length >= 4) return "medium";
+  return "low";
+}
+
+function reportEvidenceGaps(workflows: WorkflowRecord[]): string[] {
+  return unique(
+    workflows.flatMap((record) => [
+      ...record.completeness.missingFields,
+      ...record.completeness.warnings,
+      record.workflow.error_rate_percent === undefined ? `Measure error rate for ${record.workflow.name}` : "",
+      record.workflow.cost_per_error_usd === undefined ? `Validate cost per error for ${record.workflow.name}` : "",
+    ]),
+  );
+}
+
+function reportRisks(workflows: WorkflowRecord[]): string[] {
+  return unique(
+    workflows.flatMap((record) => [
+      record.workflow.data_sensitivity === "regulated"
+        ? `${record.workflow.name} uses regulated data and requires compliance review`
+        : "",
+      record.workflow.data_sensitivity === "confidential"
+        ? `${record.workflow.name} handles confidential data and needs least-privilege access`
+        : "",
+      (record.workflow.exception_rate_percent ?? 0) >= 15
+        ? `${record.workflow.name} has a high exception rate that must be stabilized`
+        : "",
+      record.workflow.evidence_quality !== "measured"
+        ? `${record.workflow.name} is based on ${record.workflow.evidence_quality.replace("_", " ")} evidence`
+        : "",
+    ]),
+  );
+}
+
+function executiveSummary(
+  audit: AuditRecord,
+  opportunities: ScoredOpportunity[],
+  roi: EstimateRoiServiceResult,
+): string {
+  if (opportunities.length === 0) {
+    return `${audit.business.name} has not captured enough scoreable workflows for a decision-ready AuditFlow report.`;
+  }
+
+  const quickWins = opportunities.filter((opportunity) => opportunity.priority_band === "quick_win").length;
+  const strategicBets = opportunities.filter((opportunity) => opportunity.priority_band === "strategic_bet").length;
+  const top = opportunities[0];
+
+  return `${audit.business.name} has ${opportunities.length} scoreable workflow opportunity${opportunities.length === 1 ? "" : "ies"}: ${quickWins} quick win${quickWins === 1 ? "" : "s"} and ${strategicBets} strategic bet${strategicBets === 1 ? "" : "s"}. ${top.workflow_name} is the strongest first move with a priority score of ${top.priority_score}. Expected first-year ROI is ${roi.scenarios[1].first_year_roi_percent ?? "not available"}% with ${roi.confidence} confidence.`;
+}
+
+function sprintFit(opportunities: ScoredOpportunity[], workflows: WorkflowRecord[]): AuditReportSprintFit {
+  const top = opportunities[0];
+  const score = top ? clampScore(0.7 * top.priority_score + 0.3 * top.confidence_score) : 0;
+  const qualified = Boolean(top && score >= 65 && top.risk_score < 70);
+  const topWorkflow = top ? workflows.find((workflow) => workflow.workflowId === top.workflow_id)?.workflow : null;
+
+  return {
+    qualified,
+    fit_score: Math.round(score),
+    recommended_sprint: qualified ? "ImpactWorks Automation Sprint" : null,
+    scope: topWorkflow
+      ? unique([
+          topWorkflow.name,
+          "Workflow intake",
+          "Classification and routing",
+          "Human approval queue",
+          "Exception dashboard",
+        ])
+      : [],
+    reasons: qualified
+      ? ["Bounded workflow", "Clear business owner", "Measurable baseline", "Governed approval path"]
+      : ["More evidence or risk reduction is needed before sprint commitment"],
+    next_step: qualified
+      ? "Review the proposed sprint scope with an ImpactWorks automation strategist."
+      : "Collect missing evidence and confirm the named owner before sprint approval.",
+  };
 }
 
 export function mapWorkflowToOpportunityScoreInput(workflow: WorkflowProfile): OpportunityScoreInput {
@@ -651,43 +1012,12 @@ export async function scoreOpportunitiesService(
   scope: TenantScope,
   input: ScoreOpportunitiesInput,
 ): Promise<ScoreOpportunitiesServiceResult> {
-  const audit = await deps.repositories.audits.getAudit(scope, input.audit_id);
-  if (!audit) {
-    throw new AuditFlowServiceError(
-      "AUDIT_NOT_FOUND",
-      "Audit was not found for the current tenant.",
-      false,
-      ["audit_id"],
-    );
-  }
-
-  const workflows = await deps.repositories.workflows.listWorkflows(scope, {
-    auditId: input.audit_id,
-    workflowIds: input.workflow_ids,
-  });
-
-  if (input.workflow_ids && workflows.length !== input.workflow_ids.length) {
-    const foundIds = new Set(workflows.map((workflow) => workflow.workflowId));
-    const missingWorkflowIds = input.workflow_ids.filter((workflowId) => !foundIds.has(workflowId));
-    throw new AuditFlowServiceError(
-      "WORKFLOW_NOT_FOUND",
-      "One or more workflows were not found for the current audit and tenant.",
-      false,
-      missingWorkflowIds,
-    );
-  }
-
-  const unscoreable = workflows.filter((workflow) => !workflow.completeness.scoreable);
-  if (unscoreable.length > 0) {
-    throw new AuditFlowServiceError(
-      "INSUFFICIENT_EVIDENCE",
-      "One or more selected workflows need more evidence before scoring.",
-      true,
-      unscoreable.flatMap((workflow) => workflow.completeness.missingFields),
-    );
-  }
-
+  await requireAudit(deps, scope, input.audit_id);
+  const workflows = input.workflow_ids
+    ? await requireWorkflowRecords(deps, scope, input.audit_id, input.workflow_ids, "scoring")
+    : await deps.repositories.workflows.listWorkflows(scope, { auditId: input.audit_id });
   const scoreableWorkflows = workflows.filter((workflow) => workflow.completeness.scoreable);
+
   if (scoreableWorkflows.length < 3) {
     throw new AuditFlowServiceError(
       "INSUFFICIENT_WORKFLOWS",
@@ -697,25 +1027,19 @@ export async function scoreOpportunitiesService(
     );
   }
 
-  const opportunities = scoreableWorkflows
-    .map((workflow) => {
-      const result = scoreOpportunity(mapWorkflowToOpportunityScoreInput(workflow.workflow));
-
-      return {
-        workflow_id: workflow.workflowId,
-        workflow_name: workflow.workflow.name,
-        impact_score: result.impactScore,
-        feasibility_score: result.feasibilityScore,
-        risk_score: result.riskScore,
-        confidence_score: result.confidenceScore,
-        priority_score: result.priorityScore,
-        priority_band: result.priorityBand,
-        automation_pattern: automationPattern(workflow.workflow),
-        reasons: scoringReasons(workflow.workflow, result),
-        blockers: scoringBlockers(workflow.workflow, result),
-      };
-    })
-    .sort((left, right) => right.priority_score - left.priority_score);
+  const opportunities = rankedWorkflowRecords(scoreableWorkflows).map((workflow) => ({
+    workflow_id: workflow.workflowId,
+    workflow_name: workflow.workflow.name,
+    impact_score: workflow.score.impactScore,
+    feasibility_score: workflow.score.feasibilityScore,
+    risk_score: workflow.score.riskScore,
+    confidence_score: workflow.score.confidenceScore,
+    priority_score: workflow.score.priorityScore,
+    priority_band: workflow.score.priorityBand,
+    automation_pattern: automationPattern(workflow.workflow),
+    reasons: scoringReasons(workflow.workflow, workflow.score),
+    blockers: scoringBlockers(workflow.workflow, workflow.score),
+  }));
 
   const now = deps.clock.now();
   await deps.repositories.audits.updateAuditStatus(scope, input.audit_id, "scored", now);
@@ -743,58 +1067,9 @@ export async function estimateRoiService(
   scope: TenantScope,
   input: EstimateRoiInput,
 ): Promise<EstimateRoiServiceResult> {
-  const audit = await deps.repositories.audits.getAudit(scope, input.audit_id);
-  if (!audit) {
-    throw new AuditFlowServiceError(
-      "AUDIT_NOT_FOUND",
-      "Audit was not found for the current tenant.",
-      false,
-      ["audit_id"],
-    );
-  }
-
-  const workflowRecords = await deps.repositories.workflows.listWorkflows(scope, {
-    auditId: input.audit_id,
-    workflowIds: input.workflow_ids,
-  });
-
-  if (workflowRecords.length !== input.workflow_ids.length) {
-    const foundIds = new Set(workflowRecords.map((workflow) => workflow.workflowId));
-    const missingWorkflowIds = input.workflow_ids.filter((workflowId) => !foundIds.has(workflowId));
-    throw new AuditFlowServiceError(
-      "WORKFLOW_NOT_FOUND",
-      "One or more workflows were not found for the current audit and tenant.",
-      false,
-      missingWorkflowIds,
-    );
-  }
-
-  const unscoreable = workflowRecords.filter((workflow) => !workflow.completeness.scoreable);
-  if (unscoreable.length > 0) {
-    throw new AuditFlowServiceError(
-      "INSUFFICIENT_EVIDENCE",
-      "One or more selected workflows need more evidence before ROI estimation.",
-      true,
-      unscoreable.flatMap((workflow) => workflow.completeness.missingFields),
-    );
-  }
-
-  const workflows = workflowRecords.map((record) => record.workflow);
-  const assumptions = adjustedScenarioAssumptions(input);
-  const roiInputs = aggregateRoiInputs(workflows, audit.defaultLoadedHourlyRateUsd, input);
-  const scenarios = (["low", "expected", "high"] as const).map((name) => {
-    const result = calculateRoiScenario(roiInputs, assumptions[name]);
-    return {
-      name,
-      annual_hours_recovered: result.annualHoursRecovered,
-      annual_labor_value_usd: result.annualLaborValue,
-      annual_error_reduction_value_usd: result.annualErrorReductionValue,
-      annual_revenue_uplift_usd: result.annualRevenueUplift,
-      annual_net_benefit_usd: result.annualNetBenefit,
-      first_year_roi_percent: result.firstYearRoiPercent,
-      payback_months: result.paybackMonths,
-    };
-  });
+  const audit = await requireAudit(deps, scope, input.audit_id);
+  const workflowRecords = await requireWorkflowRecords(deps, scope, input.audit_id, input.workflow_ids, "ROI estimation");
+  const result = buildEstimateRoiResult(audit, input, workflowRecords);
 
   const now = deps.clock.now();
   await deps.repositories.events.appendEvent(scope, {
@@ -809,16 +1084,7 @@ export async function estimateRoiService(
     },
   });
 
-  return {
-    audit_id: input.audit_id,
-    currency: "USD",
-    roi_version: ROI_VERSION,
-    scenarios,
-    assumptions: roiAssumptions(workflows, roiInputs, assumptions),
-    excluded_benefits: excludedBenefits(workflows, input.include_revenue_uplift),
-    confidence: estimateRoiConfidence(workflows),
-    disclaimer: "These are planning estimates based on supplied assumptions, not guaranteed financial results.",
-  };
+  return result;
 }
 
 export async function generateRoadmapService(
@@ -826,85 +1092,19 @@ export async function generateRoadmapService(
   scope: TenantScope,
   input: GenerateRoadmapInput,
 ): Promise<GenerateRoadmapServiceResult> {
-  const audit = await deps.repositories.audits.getAudit(scope, input.audit_id);
-  if (!audit) {
-    throw new AuditFlowServiceError(
-      "AUDIT_NOT_FOUND",
-      "Audit was not found for the current tenant.",
-      false,
-      ["audit_id"],
-    );
-  }
-
-  const workflowRecords = await deps.repositories.workflows.listWorkflows(scope, {
-    auditId: input.audit_id,
-    workflowIds: input.workflow_ids,
-  });
-
-  if (workflowRecords.length !== input.workflow_ids.length) {
-    const foundIds = new Set(workflowRecords.map((workflow) => workflow.workflowId));
-    const missingWorkflowIds = input.workflow_ids.filter((workflowId) => !foundIds.has(workflowId));
-    throw new AuditFlowServiceError(
-      "WORKFLOW_NOT_FOUND",
-      "One or more workflows were not found for the current audit and tenant.",
-      false,
-      missingWorkflowIds,
-    );
-  }
-
-  const unscoreable = workflowRecords.filter((workflow) => !workflow.completeness.scoreable);
-  if (unscoreable.length > 0) {
-    throw new AuditFlowServiceError(
-      "INSUFFICIENT_EVIDENCE",
-      "One or more selected workflows need more evidence before roadmap generation.",
-      true,
-      unscoreable.flatMap((workflow) => workflow.completeness.missingFields),
-    );
-  }
+  await requireAudit(deps, scope, input.audit_id);
+  const workflowRecords = await requireWorkflowRecords(
+    deps,
+    scope,
+    input.audit_id,
+    input.workflow_ids,
+    "roadmap generation",
+  );
 
   const maxParallel = input.max_parallel_initiatives ?? 2;
-  const rankedWorkflows = workflowRecords
-    .map((record) => ({
-      ...record,
-      score: scoreOpportunity(mapWorkflowToOpportunityScoreInput(record.workflow)),
-    }))
-    .sort((left, right) => right.score.priorityScore - left.score.priorityScore);
-
-  const phaseNames = ["days_1_30", "days_31_60", "days_61_90"] as const;
-  const phases: RoadmapPhase[] = phaseNames.map((phase) => ({
-    phase,
-    objective: phaseObjective(phase),
-    initiatives: [],
-  }));
-
-  for (const [index, record] of rankedWorkflows.entries()) {
-    const phaseName = phaseForIndex(index, maxParallel);
-    const phase = phases.find((candidate) => candidate.phase === phaseName)!;
-    phase.initiatives.push({
-      workflow_id: record.workflowId,
-      deliverable: roadmapDeliverable(record.workflow, phaseName),
-      owner_role: primaryOwnerRole(record.workflow),
-      dependencies: roadmapDependencies(record.workflow),
-      success_metric: roadmapSuccessMetric(record.workflow),
-      decision_gate: roadmapDecisionGate(record.workflow),
-    });
-  }
-
   const roadmapId = deps.ids.roadmapId();
   const now = deps.clock.now();
-  const result: GenerateRoadmapServiceResult = {
-    audit_id: input.audit_id,
-    roadmap_id: roadmapId,
-    phases,
-    critical_dependencies: roadmapCriticalDependencies(
-      rankedWorkflows.map((record) => record.workflow),
-      input.delivery_capacity,
-    ),
-    executive_decisions: roadmapExecutiveDecisions(
-      input,
-      rankedWorkflows.map((record) => record.workflow),
-    ),
-  };
+  const result = buildRoadmapResult(input.audit_id, roadmapId, input, workflowRecords);
 
   await deps.repositories.audits.updateAuditStatus(scope, input.audit_id, "roadmap_ready", now);
   await deps.repositories.events.appendEvent(scope, {
@@ -914,7 +1114,7 @@ export async function generateRoadmapService(
     occurredAt: now,
     payload: {
       roadmapId,
-      workflowIds: rankedWorkflows.map((workflow) => workflow.workflowId),
+      workflowIds: rankedWorkflowRecords(workflowRecords).map((workflow) => workflow.workflowId),
       startDate: input.start_date,
       deliveryCapacity: input.delivery_capacity ?? "mixed_team",
       maxParallelInitiatives: maxParallel,
@@ -923,4 +1123,154 @@ export async function generateRoadmapService(
   });
 
   return result;
+}
+
+export async function recommendSolutionStackService(
+  deps: AuditFlowServiceDependencies,
+  scope: TenantScope,
+  input: RecommendSolutionStackInput,
+): Promise<RecommendSolutionStackServiceResult> {
+  await requireAudit(deps, scope, input.audit_id);
+  const workflowRecords = await requireWorkflowRecords(
+    deps,
+    scope,
+    input.audit_id,
+    input.workflow_ids,
+    "solution recommendation",
+  );
+
+  const recommendations = rankedWorkflowRecords(workflowRecords).map((record) => ({
+    workflow_id: record.workflowId,
+    architecture_pattern: architecturePattern(record.workflow),
+    capabilities: workflowCapabilities(record.workflow),
+    example_products: exampleProducts(input.preference, input.allow_named_products ?? true),
+    human_review_points: humanReviewPoints(record.workflow),
+    security_controls: securityControls(record.workflow),
+    implementation_complexity: implementationComplexity(record.workflow),
+  }));
+
+  return {
+    audit_id: input.audit_id,
+    recommendations,
+  };
+}
+
+export async function getAuditReportService(
+  deps: AuditFlowServiceDependencies,
+  scope: TenantScope,
+  input: GetAuditReportInput,
+): Promise<GetAuditReportServiceResult> {
+  const audit = await requireAudit(deps, scope, input.audit_id);
+  const allWorkflowRecords = await deps.repositories.workflows.listWorkflows(scope, {
+    auditId: input.audit_id,
+  });
+  const scoreableWorkflowRecords = allWorkflowRecords.filter((workflow) => workflow.completeness.scoreable);
+  const rankedRecords = rankedWorkflowRecords(scoreableWorkflowRecords);
+  const scoredOpportunities: ScoredOpportunity[] = rankedRecords.map((record) => ({
+    workflow_id: record.workflowId,
+    workflow_name: record.workflow.name,
+    impact_score: record.score.impactScore,
+    feasibility_score: record.score.feasibilityScore,
+    risk_score: record.score.riskScore,
+    confidence_score: record.score.confidenceScore,
+    priority_score: record.score.priorityScore,
+    priority_band: record.score.priorityBand,
+    automation_pattern: automationPattern(record.workflow),
+    reasons: scoringReasons(record.workflow, record.score),
+    blockers: scoringBlockers(record.workflow, record.score),
+  }));
+  const workflowIds = rankedRecords.map((record) => record.workflowId);
+  const roi =
+    workflowIds.length > 0
+      ? buildEstimateRoiResult(
+          audit,
+          {
+            audit_id: input.audit_id,
+            workflow_ids: workflowIds,
+            implementation_cost_usd: audit.constraints?.budget_range_usd?.min,
+            annual_software_cost_usd: 0,
+            include_revenue_uplift: false,
+          },
+          rankedRecords,
+        )
+      : null;
+  const roadmap =
+    workflowIds.length > 0
+      ? buildRoadmapResult(
+          input.audit_id,
+          "rm_reportpreview",
+          {
+            audit_id: input.audit_id,
+            workflow_ids: workflowIds,
+            delivery_capacity: "mixed_team",
+            max_parallel_initiatives: 2,
+          },
+          rankedRecords,
+        )
+      : null;
+  const topOpportunities = scoredOpportunities.slice(0, 5).map((opportunity, index) => ({
+    rank: index + 1,
+    workflow_id: opportunity.workflow_id,
+    name: opportunity.workflow_name,
+    priority_score: opportunity.priority_score,
+    expected_annual_net_benefit_usd: roi?.scenarios[1].annual_net_benefit_usd ?? null,
+  }));
+  const firstMove = roadmap?.phases
+    .flatMap((phase) => phase.initiatives)
+    .at(0)?.deliverable ?? null;
+  const reportStatus: GetAuditReportServiceResult["status"] =
+    scoredOpportunities.length >= 3 && roi && roadmap ? "decision_ready" : "draft";
+  const includeSprintFit = input.include_sprint_fit ?? true;
+  const now = deps.clock.now();
+  const report: GetAuditReportServiceResult = {
+    audit_id: input.audit_id,
+    report_version: "1.0",
+    generated_at: now,
+    status: reportStatus,
+    business_snapshot: {
+      name: audit.business.name,
+      industry: audit.business.industry,
+      employee_count: audit.business.employee_count,
+      primary_goal: audit.business.primary_goal,
+    },
+    executive_summary: executiveSummary(
+      audit,
+      scoredOpportunities,
+      roi ?? {
+        audit_id: input.audit_id,
+        currency: "USD",
+        roi_version: ROI_VERSION,
+        scenarios: [],
+        assumptions: [],
+        excluded_benefits: [],
+        confidence: "low",
+        disclaimer: "",
+      },
+    ),
+    top_opportunities: topOpportunities,
+    roi_summary: {
+      expected_annual_net_benefit_usd: roi?.scenarios[1].annual_net_benefit_usd ?? null,
+      expected_first_year_roi_percent: roi?.scenarios[1].first_year_roi_percent ?? null,
+      confidence: roi?.confidence ?? "low",
+    },
+    roadmap_summary: {
+      first_move: firstMove,
+      days: 90,
+      max_parallel_initiatives: 2,
+    },
+    evidence_gaps: reportEvidenceGaps(allWorkflowRecords),
+    risks: reportRisks(allWorkflowRecords),
+    sprint_fit: includeSprintFit
+      ? sprintFit(scoredOpportunities, scoreableWorkflowRecords)
+      : {
+          qualified: false,
+          fit_score: 0,
+          recommended_sprint: null,
+          scope: [],
+          reasons: ["Sprint-fit assessment was excluded by request"],
+          next_step: "Regenerate the report with sprint fit included before making an implementation decision.",
+        },
+  };
+
+  return report;
 }
