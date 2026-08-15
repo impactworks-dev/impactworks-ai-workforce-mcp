@@ -4,10 +4,36 @@ export {
   evaluateWorkflowCompleteness,
   WORKFLOW_COMPLETENESS_VERSION,
 } from "./completeness.ts";
+export {
+  assertAuditEvent,
+  assertTenantScope,
+  createAuditEvent,
+  createAuditRecord,
+  createWorkflowRecord,
+} from "./domain.ts";
 export type {
   EvidenceConfidence,
   WorkflowCompletenessResult,
 } from "./completeness.ts";
+export type {
+  AppendAuditEventInput,
+  AuditEventRepository,
+  AuditFlowEvent,
+  AuditFlowEventType,
+  AuditFlowRepositories,
+  AuditRecord,
+  AuditRepository,
+  AuditStatus,
+  CreateAuditRecordInput,
+  EventId,
+  ListWorkflowsQuery,
+  TenantId,
+  TenantScope,
+  UpsertWorkflowRecordInput,
+  UserId,
+  WorkflowRecord,
+  WorkflowRepository,
+} from "./domain.ts";
 
 export const AUDITFLOW_TOOL_NAMES = [
   "create_audit",
