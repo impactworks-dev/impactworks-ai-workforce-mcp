@@ -67,6 +67,7 @@ Official scores and ROI come from deterministic, versioned application code—no
 - MCP-shaped JSON-RPC adapter for initialization, deterministic tool listing, structured tool calls, and stdio execution
 - Minimal Streamable HTTP MCP endpoint with bearer-token tenant scope middleware for local proof work
 - OAuth resource-server validation for JWT access tokens, audience binding, protected-resource metadata, and scoped tenant/user identity
+- ChatGPT/OpenAI remote MCP integration contract with tool security schemes, read/write scopes, and conservative approval defaults
 - Boundary and golden tests
 - Public development roadmap
 - Cog onboarding specification informed by current installable-agent patterns
@@ -114,6 +115,7 @@ docs/
 - [Architecture](docs/architecture.md)
 - [Development roadmap](docs/development-roadmap.md)
 - [Cog install and onboarding](docs/cog-onboarding.md)
+- [ChatGPT integration](docs/chatgpt-integration.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
