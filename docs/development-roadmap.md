@@ -24,10 +24,12 @@
 - [x] Protected resource metadata for authorization-server discovery
 - [x] JWT issuer, audience, expiry, scope, and trusted-claims tenant validation
 - [x] ChatGPT/OpenAI remote MCP integration contract
-- [ ] Audit event log and evidence projection
+- [x] Cloudflare Worker adapter for the remote MCP technical spike
+- [x] Audit event log and evidence projection
+- [x] Synthetic audit evaluation harness
 - [ ] Live ChatGPT developer-mode connection test
+- [ ] Cloudflare Wrangler local proof and deployed non-production endpoint
 - [ ] First supported host integration
-- [ ] Synthetic audit evaluation harness
 
 ## Phase 3 — Internal proof
 
