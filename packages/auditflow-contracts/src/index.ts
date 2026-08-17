@@ -5,6 +5,15 @@ export {
   WORKFLOW_COMPLETENESS_VERSION,
 } from "./completeness.ts";
 export {
+  AUDITFLOW_EVIDENCE_PROJECTION_VERSION,
+  projectAuditEvidence,
+} from "./evidence.ts";
+export {
+  AUDITFLOW_EVAL_HARNESS_VERSION,
+  impactWorksLeadToProposalEvalScenario,
+  runAuditFlowEvalScenario,
+} from "./evals.ts";
+export {
   assertAuditEvent,
   assertTenantScope,
   createAuditEvent,
@@ -26,6 +35,18 @@ export type {
   EvidenceConfidence,
   WorkflowCompletenessResult,
 } from "./completeness.ts";
+export type {
+  AuditEvidenceProjection,
+  AuditEvidenceSeverity,
+  AuditEvidenceTimelineItem,
+  WorkflowEvidenceProjection,
+} from "./evidence.ts";
+export type {
+  AuditFlowEvalAssertion,
+  AuditFlowEvalResult,
+  AuditFlowEvalScenario,
+  AuditFlowEvalWorkflowFixture,
+} from "./evals.ts";
 export type {
   AppendAuditEventInput,
   AuditEventRepository,

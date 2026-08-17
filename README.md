@@ -68,6 +68,8 @@ Official scores and ROI come from deterministic, versioned application code—no
 - Minimal Streamable HTTP MCP endpoint with bearer-token tenant scope middleware for local proof work
 - OAuth resource-server validation for JWT access tokens, audience binding, protected-resource metadata, and scoped tenant/user identity
 - ChatGPT/OpenAI remote MCP integration contract with tool security schemes, read/write scopes, and conservative approval defaults
+- Audit evidence projection for dashboard-ready lifecycle, workflow evidence, calculation versions, approvals, and errors
+- AuditFlow eval harness with the ImpactWorks lead-to-proposal golden-path scenario
 - Boundary and golden tests
 - Public development roadmap
 - Cog onboarding specification informed by current installable-agent patterns
@@ -92,6 +94,8 @@ packages/
   scoring-engine/       Deterministic scores and ROI
   auditflow-contracts/  Runtime contracts, validation, domain entities, and services
   auditflow-mcp/        Host-neutral tool dispatcher, MCP adapters, stdio/HTTP runners, and in-memory runtime
+workers/
+  auditflow-mcp/        Cloudflare Worker entrypoint and Wrangler example for the remote MCP proof
 tests/                  Node test suite
 docs/
   architecture.md       System and trust architecture
@@ -116,6 +120,8 @@ docs/
 - [Development roadmap](docs/development-roadmap.md)
 - [Cog install and onboarding](docs/cog-onboarding.md)
 - [ChatGPT integration](docs/chatgpt-integration.md)
+- [Cloudflare MCP wrapper](docs/cloudflare-mcp.md)
+- [AuditFlow eval harness](docs/auditflow-evals.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

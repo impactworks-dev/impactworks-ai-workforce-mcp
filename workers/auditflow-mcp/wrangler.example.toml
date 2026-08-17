@@ -1,0 +1,13 @@
+name = "impactworks-auditflow-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-08-15"
+
+# Copy this file to wrangler.toml when the Cloudflare Worker is ready to deploy.
+# Do not commit real OAuth secrets, tokens, or tenant-specific credentials.
+
+[vars]
+IMPACTWORKS_MCP_ENDPOINT_PATH = "/mcp"
+IMPACTWORKS_MCP_ALLOWED_ORIGINS = "https://chatgpt.com,https://chat.openai.com"
+IMPACTWORKS_MCP_RESOURCE = "https://impactworks-auditflow-mcp.<account>.workers.dev/mcp"
+IMPACTWORKS_AUTHORIZATION_SERVERS = "https://auth.impactworks.example"
+IMPACTWORKS_OAUTH_REQUIRED_SCOPES = "auditflow:read,auditflow:write"

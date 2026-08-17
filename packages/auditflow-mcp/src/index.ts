@@ -28,6 +28,9 @@ export {
   defaultChatGptApprovalPolicy,
 } from "./chatgpt.ts";
 export {
+  createAuditFlowCloudflareMcpWorker,
+} from "./cloudflare.ts";
+export {
   AUDITFLOW_MCP_PROTOCOL_VERSION,
   createAuditFlowMcpProtocolServer,
   listAuditFlowMcpTools,
@@ -72,6 +75,11 @@ export type {
   ChatGptRemoteMcpToolConfig,
   ChatGptToolSecurityScheme,
 } from "./chatgpt.ts";
+export type {
+  AuditFlowCloudflareEnvironment,
+  AuditFlowCloudflareMcpWorker,
+  AuditFlowCloudflareMcpWorkerOptions,
+} from "./cloudflare.ts";
 export type {
   AuditFlowMcpProtocolServer,
   AuditFlowMcpProtocolServerOptions,
