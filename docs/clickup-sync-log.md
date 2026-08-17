@@ -1,12 +1,14 @@
 # ClickUp Sync Log
 
-Use this file while external ClickUp updates are blocked. When credits return, sync these items into the ImpactWorks Ops ClickUp project and then mark each entry as synced.
+Use this file to queue and reconcile external ClickUp project updates. Record the destination and read-back evidence after each sync.
 
-## Pending updates
+## Sync history
 
 ### 2026-08-16 - PR #8 merged
 
-- Status: Pending ClickUp sync
+- Status: Synced to ClickUp on 2026-08-17
+- ClickUp task: `86ak19dhv` — Integrate the first supported MCP host
+- Verification: Comment read back in task Activity as Dante Crescenzi.
 - Suggested location: ImpactWorks AI Workforce MCP project, development/status task or activity thread
 - Update text:
   - PR #8 merged into `main`: ChatGPT remote MCP integration contract.
@@ -18,7 +20,9 @@ Use this file while external ClickUp updates are blocked. When credits return, s
 
 ### 2026-08-16 - Cloudflare MCP wrapper implemented locally
 
-- Status: Pending ClickUp sync
+- Status: Synced to ClickUp on 2026-08-17
+- ClickUp task: `86ak19re6` — Cog Workforce Harness — Cloudflare edge-agent proof
+- Verification: Comment read back in task Activity as Dante Crescenzi.
 - Suggested location: Cloudflare MCP technical spike task
 - Update text:
   - Local branch: `codex-cloudflare-mcp-wrapper`.
@@ -28,20 +32,23 @@ Use this file while external ClickUp updates are blocked. When credits return, s
   - Added Cloudflare MCP wrapper documentation: `docs/cloudflare-mcp.md`.
   - Added Worker adapter tests covering `/health`, `/mcp`, OAuth metadata, bearer auth, origin checks, and in-memory isolate continuity.
   - Verification passed locally: `npm test`, 78/78 tests, and `git diff --check`.
-  - GitHub handoff blocked until credits return: commit, push, open PR #9.
+  - GitHub handoff completed after credits returned: branch pushed and PR #9 opened against `main`.
 
 ### 2026-08-16 - External-write blocker
 
-- Status: Pending ClickUp sync
+- Status: Resolved on 2026-08-17 without ClickUp sync
+- Resolution: Credits were restored, GitHub handoff resumed, ClickUp writes succeeded, and the stale blocker was not posted as a current project risk.
 - Suggested location: project risk/blocker note
-- Update text:
+- Original blocker text (historical):
   - Workspace credits are exhausted, blocking escalated Git and external connector writes.
   - Local coding can continue.
   - Blocked external actions: Git commit/push, GitHub PR creation, ClickUp task/comment updates, dependency downloads, deployments.
 
 ### 2026-08-16 - Audit evidence projection implemented locally
 
-- Status: Pending ClickUp sync
+- Status: Synced to ClickUp on 2026-08-17
+- ClickUp task: `86ak19dh8` — Sprint 1 — Build AuditFlow runtime contracts and domain entities
+- Verification: Comment read back in task Activity as Dante Crescenzi.
 - Suggested location: Audit event log and evidence projection task
 - Update text:
   - Added AuditFlow evidence projection module: `packages/auditflow-contracts/src/evidence.ts`.
@@ -53,7 +60,9 @@ Use this file while external ClickUp updates are blocked. When credits return, s
 
 ### 2026-08-16 - Synthetic AuditFlow eval harness implemented locally
 
-- Status: Pending ClickUp sync
+- Status: Synced to ClickUp on 2026-08-17
+- ClickUp task: `86ak19dhk` — Create ImpactWorks lead-to-proposal golden-path fixture
+- Verification: Comment read back in task Activity as Dante Crescenzi.
 - Suggested location: Synthetic audit evaluation harness task
 - Update text:
   - Added AuditFlow eval harness: `packages/auditflow-contracts/src/evals.ts`.
